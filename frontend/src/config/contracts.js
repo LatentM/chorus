@@ -1,8 +1,8 @@
 // Deployed VotingPlatform address on Polygon Amoy.
 // Set VITE_PLATFORM_ADDRESS in frontend/.env after running
 //   contracts: npm run deploy:amoy
-export const PLATFORM_ADDRESS =
-  import.meta.env.VITE_PLATFORM_ADDRESS ||
+export const PLATFORM_ADDRESS = "0x6539356dbdb69edd047feeb32ba10f4c002ec5ba";
+import.meta.env.VITE_PLATFORM_ADDRESS ||
   "0x0000000000000000000000000000000000000000";
 
 export const PLATFORM_ABI = [
