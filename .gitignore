@@ -1,0 +1,11 @@
+node_modules/
+.env
+cache/
+artifacts/
+dist/
+.mock-ipfs/
+*.zkey
+*.ptau
+results.json
+merkleTree.json
+electionKeys.json

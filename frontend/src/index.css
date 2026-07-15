@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-ink text-ballot font-sans antialiased;
+  background-image: radial-gradient(
+    circle at 50% -20%,
+    rgba(180, 85, 45, 0.12),
+    transparent 55%
+  );
+}
+
+.card {
+  @apply bg-panel border border-edge rounded-md p-6;
+}
+
+.btn {
+  @apply px-4 py-2 rounded font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+}
+.btn-seal { @apply btn bg-seal hover:bg-[#c9633a] text-ballot; }
+.btn-ghost { @apply btn border border-edge hover:border-muted text-ballot; }
+.btn-verify { @apply btn bg-verify hover:bg-[#4aa583] text-ink; }
+
+.input {
+  @apply w-full bg-ink border border-edge rounded px-3 py-2 text-ballot
+    placeholder-muted focus:outline-none focus:border-seal font-mono text-sm;
+}
+
+.label { @apply block text-xs uppercase tracking-widest text-muted mb-1; }
+
+.mono-chip {
+  @apply font-mono text-xs bg-ink border border-edge rounded px-2 py-1 break-all;
+}

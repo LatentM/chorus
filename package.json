@@ -1,0 +1,15 @@
+{
+  "name": "trustvote",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zero-knowledge, blockchain-based voting platform on Polygon Amoy",
+  "scripts": {
+    "install:all": "cd contracts && npm install && cd ../scripts && npm install && cd ../frontend && npm install",
+    "compile": "cd contracts && npx hardhat compile",
+    "test": "cd contracts && npx hardhat test",
+    "dev": "cd frontend && npm run dev"
+  },
+  "dependencies": {
+    "circomlib": "^2.0.5"
+  }
+}

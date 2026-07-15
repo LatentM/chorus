@@ -1,0 +1,16 @@
+{
+  "name": "trustvote-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "commitments": "node deriveCommitments.js",
+    "tree": "node generateMerkleTree.js",
+    "keys": "node generateKeys.js",
+    "tally": "node tally.js"
+  },
+  "dependencies": {
+    "circomlibjs": "^0.1.7",
+    "ethers": "^6.13.0"
+  }
+}
