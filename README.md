@@ -1,7 +1,10 @@
 # TrustVote
 
 A zero-knowledge, blockchain-based voting platform with end-to-end
-verifiability on **Polygon Amoy**.
+verifiability. Targets Ethereum **Sepolia** by default (a `amoy` network is
+also pre-wired in `contracts/hardhat.config.js` if you'd rather use Polygon
+Amoy — swap `sepolia` for `polygonAmoy` in `frontend/src/main.jsx` and the
+faucet/RPC details below if so).
 
 - **Ballot secrecy** — exponential ElGamal on BabyJubJub; nobody (including the
   operator) can see an individual vote.
@@ -25,10 +28,15 @@ trustvote/
 ### 0. Prerequisites
 
 - Node.js ≥ 18, npm
-- MetaMask (or any RainbowKit-supported wallet) with the **Polygon Amoy**
-  network added (chain id 80002, RPC `https://rpc-amoy.polygon.technology`)
-- **Test MATIC faucet:** https://faucet.polygon.technology (select Amoy) —
-  the deployer/admin wallet and every voter wallet need a little POL/MATIC for gas.
+- MetaMask (or any RainbowKit-supported wallet) with the **Sepolia** network
+  enabled (chain id 11155111 — MetaMask ships this by default, just toggle
+  "Show test networks")
+- **A Sepolia RPC URL:** unlike Polygon Amoy, Sepolia has no reliable public
+  endpoint. Get a free one from https://infura.io or https://alchemy.com and
+  put it in `contracts/.env` as `SEPOLIA_RPC_URL`.
+- **Test ETH faucet:** https://sepoliafaucet.com or
+  https://www.alchemy.com/faucets/ethereum-sepolia — the deployer/admin
+  wallet and every voter wallet need a little Sepolia ETH for gas.
 
 ### 1. Contracts
 
@@ -37,11 +45,40 @@ cd contracts
 npm install
 npx hardhat compile          # ✅ acceptance: compiles
 npx hardhat test             # election lifecycle unit tests
-cp .env.example .env         # add PRIVATE_KEY (admin wallet)
-npm run deploy:amoy          # deploys Groth16Verifier (mock) then VotingPlatform
 ```
 
-Copy the printed `VotingPlatform` address.
+**Option A — local Hardhat node (recommended for the demo: no faucet, instant, free):**
+
+```bash
+npx hardhat node             # terminal 1: local chain on http://127.0.0.1:8545
+npx hardhat run scripts/deploy.js --network localhost   # terminal 2
+```
+
+Then in MetaMask: add a network manually (RPC `http://127.0.0.1:8545`,
+chain id `31337`, currency `ETH`) and *import* one of the private keys the
+node printed (account #0 is the deployer/admin) — each comes with 10,000
+test ETH. ⚠️ Dev keys only; never use them anywhere real. If you restart the
+node later, redeploy and clear MetaMask's activity (Settings → Advanced →
+Clear activity tab data) to reset stale nonces.
+
+**Option B — Sepolia testnet** (`.env` needs `PRIVATE_KEY` + `SEPOLIA_RPC_URL`
+from https://infura.io / https://alchemy.com; test ETH from
+https://sepoliafaucet.com):
+
+```bash
+npx hardhat run scripts/deploy.js --network sepolia
+```
+
+**Option C — Polygon Amoy** (`.env` needs `PRIVATE_KEY`; POL from
+https://faucet.polygon.technology):
+
+```bash
+npm run deploy:amoy
+```
+
+Whichever you choose, copy the printed `VotingPlatform` address. The frontend
+supports all three networks at once — it simply talks to whichever network
+your wallet is switched to.
 
 ### 2. Frontend
 

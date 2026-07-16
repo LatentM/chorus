@@ -22,7 +22,7 @@ export default function App() {
               Trust<span className="text-seal">Vote</span>
             </h1>
             <p className="text-muted text-xs mt-0.5 font-mono">
-              zero-knowledge voting · Polygon Amoy · Groth16 + Poseidon + ElGamal
+              zero-knowledge voting · Groth16 + Poseidon + ElGamal
             </p>
           </div>
           <ConnectButton showBalance={false} />

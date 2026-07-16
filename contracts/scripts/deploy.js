@@ -19,11 +19,13 @@ async function main() {
   console.log("VotingPlatform deployed to:", platformAddress);
 
   console.log("\nNext steps:");
-  console.log("  1. Put these addresses in frontend/src/config/contracts.js");
-  console.log("  2. (Optional) Verify on Polygonscan:");
-  console.log(`     npx hardhat verify --network amoy ${verifierAddress}`);
+  console.log("  1. Put these addresses in frontend/.env (VITE_PLATFORM_ADDRESS)");
+  console.log("  2. (Optional) Verify on the block explorer:");
   console.log(
-    `     npx hardhat verify --network amoy ${platformAddress} ${verifierAddress}`
+    `     npx hardhat verify --network ${hre.network.name} ${verifierAddress}`
+  );
+  console.log(
+    `     npx hardhat verify --network ${hre.network.name} ${platformAddress} ${verifierAddress}`
   );
 }
 

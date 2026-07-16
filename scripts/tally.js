@@ -1,6 +1,6 @@
 // Usage: node tally.js <electionId> [keysFile=electionKeys.json] [nCandidates=10]
 //
-// 1. Connects to Polygon Amoy via ethers and fetches all VoteCast events
+// 1. Connects to the target chain via ethers and fetches all VoteCast events
 //    for the election.
 // 2. For each ciphertext (C1, C2):
 //      sharedSecret = C1 * sk
@@ -20,7 +20,11 @@ import { ethers } from "ethers";
 import { buildBabyjub } from "circomlibjs";
 import { uploadJSON } from "./pinata.js";
 
-const RPC_URL = process.env.AMOY_RPC_URL || "https://rpc-amoy.polygon.technology";
+const RPC_URL =
+  process.env.RPC_URL ||
+  process.env.SEPOLIA_RPC_URL ||
+  process.env.AMOY_RPC_URL ||
+  "https://rpc-amoy.polygon.technology";
 const PLATFORM_ADDRESS = process.env.PLATFORM_ADDRESS || "";
 const DEPLOY_BLOCK = Number(process.env.DEPLOY_BLOCK || 0);
 

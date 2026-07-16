@@ -26,7 +26,11 @@ const VOTE_CAST_EVENT = parseAbiItem(
 
 export default function AdminPage() {
   const { address, isConnected } = useAccount();
-  const { data: owner } = useReadContract({
+  const {
+    data: owner,
+    isLoading: ownerLoading,
+    error: ownerError,
+  } = useReadContract({
     address: PLATFORM_ADDRESS,
     abi: PLATFORM_ABI,
     functionName: "owner",
@@ -36,7 +40,27 @@ export default function AdminPage() {
 
   if (!isConnected)
     return <p className="card text-muted">Connect the admin wallet to continue.</p>;
-  if (owner && !isAdmin)
+  // Fail CLOSED: if owner() can't be read, the contract address / network is
+  // wrong, so don't render a wizard whose transactions are guaranteed to fail.
+  if (ownerError)
+    return (
+      <div className="card text-seal">
+        <p className="font-medium mb-2">Cannot reach the VotingPlatform contract.</p>
+        <p className="text-sm text-muted">
+          Check that <span className="font-mono">VITE_PLATFORM_ADDRESS</span> in{" "}
+          <span className="font-mono">frontend/.env</span> matches your deployed
+          contract, that your wallet is on the same network the contract was deployed to (local 31337 / Sepolia 11155111 / Amoy 80002), and
+          that you restarted <span className="font-mono">npm run dev</span> after
+          editing .env.
+        </p>
+        <p className="mono-chip mt-3 break-all">
+          {PLATFORM_ADDRESS} — {ownerError.shortMessage || ownerError.message}
+        </p>
+      </div>
+    );
+  if (ownerLoading || !owner)
+    return <p className="card text-muted">Checking admin rights on-chain…</p>;
+  if (!isAdmin)
     return (
       <p className="card text-seal">
         Connected wallet is not the platform owner ({short(owner)}). Admin
