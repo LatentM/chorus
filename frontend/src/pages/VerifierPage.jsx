@@ -138,7 +138,7 @@ export default function VerifierPage() {
             placeholder="Election ID"
           />
           <button className="btn-verify" onClick={audit} disabled={busy || !electionId}>
-            {busy ? "Auditing…" : "Audit"}
+            {busy ? (<><span className="spinner" /> Auditing…</>) : "Audit"}
           </button>
         </div>
         {error && <p className="text-seal text-sm mt-3">{error}</p>}
@@ -149,10 +149,8 @@ export default function VerifierPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-display text-lg font-bold">Audit report</h3>
             <span
-              className={`px-4 py-1.5 rounded font-display font-extrabold tracking-widest text-sm ${
-                report.verified
-                  ? "bg-verify text-ink"
-                  : "bg-seal text-ballot"
+              className={`verdict ${
+                report.verified ? "text-verify" : "text-seal"
               }`}
             >
               {report.verified ? "✓ VERIFIED" : "✗ NOT VERIFIED"}
@@ -179,21 +177,21 @@ export default function VerifierPage() {
             </p>
           )}
 
-          <table className="w-full text-sm">
+          <table className="audit-table">
             <thead>
-              <tr className="text-muted text-left">
-                <th className="pb-2 font-normal">Candidate</th>
-                <th className="pb-2 font-normal text-right">Published</th>
-                <th className="pb-2 font-normal text-right">Recounted</th>
+              <tr>
+                <th>Candidate</th>
+                <th className="num">Published</th>
+                <th className="num">Recounted</th>
               </tr>
             </thead>
             <tbody>
               {report.published.map((r, i) => (
-                <tr key={i} className="border-t border-edge">
-                  <td className="py-2">{r.candidate}</td>
-                  <td className="py-2 text-right font-mono">{r.votes}</td>
+                <tr key={i}>
+                  <td>{r.candidate}</td>
+                  <td className="num font-mono">{r.votes}</td>
                   <td
-                    className={`py-2 text-right font-mono ${
+                    className={`num font-mono ${
                       report.recount[i] === r.votes ? "text-verify" : "text-seal"
                     }`}
                   >

@@ -234,12 +234,12 @@ function CreateElectionWizard() {
           <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         <button className="btn-seal" onClick={create} disabled={busy || !electionId || !start || !end}>
-          {busy ? "Creating…" : "Build tree · upload · createElection"}
+          {busy ? (<><span className="spinner" /> Creating…</>) : "Build tree · upload · createElection"}
         </button>
       </div>
       {log.length > 0 && (
         <ol className="mt-4 space-y-1 text-xs font-mono text-muted">
-          {log.map((m, i) => <li key={i}>· {m}</li>)}
+          {log.map((m, i) => <li key={i} className="log-line">· {m}</li>)}
         </ol>
       )}
       {error && <p className="text-seal text-sm mt-3">{error}</p>}
@@ -425,7 +425,7 @@ function TallyCard() {
         </div>
         <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Vault password" />
         <button className="btn-verify" onClick={runTally} disabled={busy || !electionId}>
-          {busy ? "Tallying…" : "Decrypt · prove · publish"}
+          {busy ? (<><span className="spinner" /> Tallying…</>) : "Decrypt · prove · publish"}
         </button>
         <p className="text-xs text-muted">
           Same logic as <span className="font-mono">scripts/tally.js</span> —
@@ -434,7 +434,7 @@ function TallyCard() {
       </div>
       {log.length > 0 && (
         <ol className="mt-4 space-y-1 text-xs font-mono text-muted">
-          {log.map((m, i) => <li key={i}>· {m}</li>)}
+          {log.map((m, i) => <li key={i} className="log-line">· {m}</li>)}
         </ol>
       )}
       {error && <p className="text-seal text-sm mt-3">{error}</p>}
@@ -446,7 +446,7 @@ function Stat({ k, v }) {
   return (
     <div>
       <p className="label">{k}</p>
-      <p className="font-display text-2xl font-bold">{v}</p>
+      <p className="stat-v">{v}</p>
     </div>
   );
 }

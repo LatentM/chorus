@@ -25,6 +25,8 @@ const ZKEY_URL = "/circuits/circuit_final.zkey";
 /** Block-explorer tx URL per chain; null when there is none (local node). */
 function explorerTxUrl(chainId, tx) {
   switch (chainId) {
+    case 137:
+      return `https://polygonscan.com/tx/${tx}`;
     case 80002:
       return `https://amoy.polygonscan.com/tx/${tx}`;
     case 11155111:
@@ -38,21 +40,21 @@ export default function VotePage() {
   const [mode, setMode] = useState("register"); // register | vote | verify
   return (
     <div>
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6" role="tablist" aria-label="Voter actions">
         <button
-          className={mode === "register" ? "btn-seal" : "btn-ghost"}
+          className={mode === "register" ? "subtab-on" : "subtab-off"}
           onClick={() => setMode("register")}
         >
           Register
         </button>
         <button
-          className={mode === "vote" ? "btn-seal" : "btn-ghost"}
+          className={mode === "vote" ? "subtab-on" : "subtab-off"}
           onClick={() => setMode("vote")}
         >
           Cast a ballot
         </button>
         <button
-          className={mode === "verify" ? "btn-seal" : "btn-ghost"}
+          className={mode === "verify" ? "subtab-on" : "subtab-off"}
           onClick={() => setMode("verify")}
         >
           Verify my vote
@@ -301,16 +303,12 @@ function CastBallot() {
               {metadata.candidates.map((name, i) => (
                 <label
                   key={i}
-                  className={`flex items-center gap-3 border rounded px-4 py-3 cursor-pointer transition-colors ${
-                    candidate === i
-                      ? "border-seal bg-seal/10"
-                      : "border-edge hover:border-muted"
-                  }`}
+                  className={`ballot-row ${candidate === i ? "ballot-row-on" : ""}`}
                 >
                   <input
                     type="radio"
                     name="candidate"
-                    className="accent-[#B4552D]"
+                    className="accent-[#C8502E] w-4 h-4"
                     checked={candidate === i}
                     onChange={() => setCandidate(i)}
                   />
@@ -326,22 +324,24 @@ function CastBallot() {
               }
               onClick={castVote}
             >
-              {busy ? "Proving & submitting…" : "Cast anonymous vote"}
+              {busy ? (<><span className="spinner" /> Proving & submitting…</>) : "Cast anonymous vote"}
             </button>
           </>
         )}
 
         {progress.length > 0 && (
-          <ol className="mt-5 space-y-1 text-xs font-mono text-muted">
+          <ol className="mt-5 space-y-1.5 text-xs font-mono text-muted">
             {progress.map((m, i) => (
-              <li key={i}>· {m}</li>
+              <li key={i} className="log-line">· {m}</li>
             ))}
           </ol>
         )}
 
         {receipt && (
-          <div className="mt-5 border border-verify rounded p-4">
-            <p className="text-verify font-medium mb-2">Ballot receipt</p>
+          <div className="mt-5 stamped text-verify animate-stamp-in">
+            <p className="font-display font-black tracking-[0.14em] uppercase mb-3">
+              Ballot receipt
+            </p>
             <p className="label">Nullifier (save this to verify later)</p>
             <p className="mono-chip mb-2">{receipt.nullifier}</p>
             <p className="label">Transaction</p>
@@ -521,15 +521,17 @@ function RegisterCommitment() {
           disabled={!isConnected || !electionId || busy}
           onClick={register}
         >
-          {busy ? "Signing…" : "Derive commitment (sign)"}
+          {busy ? (<><span className="spinner" /> Signing…</>) : "Derive commitment (sign)"}
         </button>
       </div>
       {!isConnected && (
         <p className="text-xs text-muted">Connect a wallet to register.</p>
       )}
       {commitment && (
-        <div className="border border-verify rounded p-4">
-          <p className="text-verify font-medium mb-2">Your voter commitment</p>
+        <div className="stamped text-verify animate-stamp-in">
+          <p className="font-display font-black tracking-[0.14em] uppercase mb-3">
+            Voter commitment
+          </p>
           <p className="mono-chip break-all mb-3">{commitment}</p>
           <button
             className="btn-ghost"
@@ -604,7 +606,7 @@ function VerifyMyVote() {
         onClick={verify}
         disabled={!isConnected || !electionId || busy}
       >
-        {busy ? "Checking…" : "Re-derive nullifier & check"}
+        {busy ? (<><span className="spinner" /> Checking…</>) : "Re-derive nullifier & check"}
       </button>
       {result && (
         <div className="mt-5">
@@ -629,9 +631,10 @@ function VerifyMyVote() {
 /* helpers */
 function Row({ k, v, mono, accent }) {
   return (
-    <div className="flex justify-between gap-4">
-      <span className="text-muted">{k}</span>
-      <span className={`${mono ? "font-mono text-xs" : ""} ${accent ? "text-verify" : ""} text-right`}>
+    <div className="kv">
+      <span className="kv-k">{k}</span>
+      <span className="kv-leader" aria-hidden="true" />
+      <span className={`kv-v ${mono ? "font-mono text-xs" : ""} ${accent ? "text-verify" : ""}`}>
         {v}
       </span>
     </div>

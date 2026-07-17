@@ -36,7 +36,7 @@ describe("VotingPlatform", () => {
 
   beforeEach(async () => {
     [owner, voter] = await ethers.getSigners();
-    const Verifier = await ethers.getContractFactory("Groth16Verifier");
+    const Verifier = await ethers.getContractFactory("MockGroth16Verifier");
     verifier = await Verifier.deploy();
     const Platform = await ethers.getContractFactory("VotingPlatform");
     platform = await Platform.deploy(await verifier.getAddress());
