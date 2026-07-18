@@ -40,9 +40,18 @@ contract VotingPlatform is Ownable {
         uint256 pubKeyY;
         bool exists;
         string resultCID; // IPFS CID of published results (set after tally)
+        uint256 resultPublishedAt; // block.timestamp of the publication (0 = unpublished)
+        string metadataCid; // IPFS CID of election metadata (title, candidates,
+                            // merkle tree CID, pubkey) — stored on-chain so ANY
+                            // client can discover an election from its id alone
     }
 
     mapping(uint256 => Election) public elections;
+
+    /// Per-election delegated manager. The platform owner retains all rights
+    /// everywhere; a manager may ONLY publish results for their one election.
+    /// address(0) = no manager assigned.
+    mapping(uint256 => address) public electionManagers;
 
     /// nullifiers[electionId][nullifier] => used?  (double-vote prevention)
     mapping(uint256 => mapping(uint256 => bool)) public nullifiers;
@@ -53,7 +62,8 @@ contract VotingPlatform is Ownable {
         uint256 indexed electionId,
         bytes32 merkleRoot,
         uint256 startTime,
-        uint256 endTime
+        uint256 endTime,
+        string metadataCid
     );
 
     event VoteCast(
@@ -62,7 +72,17 @@ contract VotingPlatform is Ownable {
         uint256[4] ciphertext // [c1x, c1y, c2x, c2y]
     );
 
-    event ResultPublished(uint256 indexed electionId, string resultCID);
+    event ResultPublished(
+        uint256 indexed electionId,
+        string resultCID,
+        uint256 publishedAt,
+        address indexed publishedBy
+    );
+
+    event ManagerAssigned(
+        uint256 indexed electionId,
+        address indexed manager
+    );
 
     constructor(address _verifier) Ownable(msg.sender) {
         verifier = IGroth16Verifier(_verifier);
@@ -74,7 +94,8 @@ contract VotingPlatform is Ownable {
         uint256 startTime,
         uint256 endTime,
         uint256 pubKeyX,
-        uint256 pubKeyY
+        uint256 pubKeyY,
+        string calldata metadataCid
     ) external onlyOwner {
         require(!elections[electionId].exists, "Election exists");
         elections[electionId] = Election(
@@ -84,9 +105,17 @@ contract VotingPlatform is Ownable {
             pubKeyX,
             pubKeyY,
             true,
-            ""
+            "",
+            0,
+            metadataCid
         );
-        emit ElectionCreated(electionId, merkleRoot, startTime, endTime);
+        emit ElectionCreated(
+            electionId,
+            merkleRoot,
+            startTime,
+            endTime,
+            metadataCid
+        );
     }
 
     function castVote(
@@ -119,14 +148,44 @@ contract VotingPlatform is Ownable {
         emit VoteCast(electionId, nullifier, ciphertext);
     }
 
-    /// @notice Publish the IPFS CID of the tally + Chaum-Pedersen decryption proofs.
-    function setResultCID(uint256 electionId, string calldata cid)
+    /// @notice Assign (or replace/revoke with address(0)) the manager of ONE
+    ///         election. Owner-only: the platform operator stays in control of
+    ///         who runs what; the manager's authority never extends beyond
+    ///         their own election.
+    function setElectionManager(uint256 electionId, address manager)
         external
         onlyOwner
     {
         require(elections[electionId].exists, "Election not found");
-        elections[electionId].resultCID = cid;
-        emit ResultPublished(electionId, cid);
+        electionManagers[electionId] = manager;
+        emit ManagerAssigned(electionId, manager);
+    }
+
+    /// Owner everywhere; manager only for their own election.
+    modifier onlyElectionAuthority(uint256 electionId) {
+        require(
+            msg.sender == owner() ||
+                msg.sender == electionManagers[electionId],
+            "Not election authority"
+        );
+        _;
+    }
+
+    /// @notice Publish the IPFS CID of the tally + Chaum-Pedersen decryption
+    ///         proofs. Callable by the owner or the election's manager, and
+    ///         ONLY after the voting window has closed — results cannot be
+    ///         "published" early to mislead observers. The publication moment
+    ///         is recorded on-chain.
+    function setResultCID(uint256 electionId, string calldata cid)
+        external
+        onlyElectionAuthority(electionId)
+    {
+        Election storage e = elections[electionId];
+        require(e.exists, "Election not found");
+        require(block.timestamp > e.endTime, "Election not ended");
+        e.resultCID = cid;
+        e.resultPublishedAt = block.timestamp;
+        emit ResultPublished(electionId, cid, block.timestamp, msg.sender);
     }
 
     /// @notice Convenience getter that returns the whole struct (incl. resultCID).

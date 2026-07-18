@@ -3,6 +3,7 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import VotePage from "./pages/VotePage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import VerifierPage from "./pages/VerifierPage.jsx";
+import Landing from "./pages/Landing.jsx";
 
 const TABS = [
   { id: "voter", label: "Voter", blurb: "Cast an anonymous, provable ballot." },
@@ -45,7 +46,7 @@ function SealMark() {
 }
 
 export default function App() {
-  const [tab, setTab] = useState("voter");
+  const [tab, setTab] = useState("home");
   const active = TABS.find((t) => t.id === tab);
 
   return (
@@ -53,7 +54,11 @@ export default function App() {
       <header className="sticky top-0 z-40 border-b border-edge bg-ink/85 backdrop-blur-md shadow-[0_8px_24px_-16px_rgba(0,0,0,0.9)]">
         <div className="max-w-5xl mx-auto px-6 pt-5 pb-0">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
+            <button
+              className="flex items-center gap-4 text-left"
+              onClick={() => setTab("home")}
+              aria-label="TrustVote home"
+            >
               <SealMark />
               <div>
                 <h1 className="font-display font-black text-[2rem] leading-none tracking-tight">
@@ -63,7 +68,7 @@ export default function App() {
                   Zero-knowledge voting · Groth16 · Poseidon · ElGamal
                 </p>
               </div>
-            </div>
+            </button>
             <ConnectButton showBalance={false} />
           </div>
 
@@ -88,10 +93,18 @@ export default function App() {
 
       <main className="max-w-5xl mx-auto px-6 py-8 w-full flex-1">
         <div key={tab} className="animate-fade-up">
-          <p className="font-display italic text-muted mb-6">{active?.blurb}</p>
-          {tab === "voter" && <VotePage />}
-          {tab === "admin" && <AdminPage />}
-          {tab === "verifier" && <VerifierPage />}
+          {tab === "home" ? (
+            <Landing onNavigate={setTab} />
+          ) : (
+            <>
+              <p className="font-display italic text-muted mb-6">
+                {active?.blurb}
+              </p>
+              {tab === "voter" && <VotePage />}
+              {tab === "admin" && <AdminPage />}
+              {tab === "verifier" && <VerifierPage />}
+            </>
+          )}
         </div>
       </main>
 

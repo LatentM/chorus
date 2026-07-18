@@ -1,9 +1,10 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
+const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
 describe("VotingPlatform", () => {
-  let platform, verifier, owner, voter;
+  let platform, verifier, owner, voter, manager;
   const ELECTION_ID = 1n;
   const ROOT = ethers.zeroPadValue("0x1234", 32);
 
@@ -35,7 +36,7 @@ describe("VotingPlatform", () => {
   ];
 
   beforeEach(async () => {
-    [owner, voter] = await ethers.getSigners();
+    [owner, voter, manager] = await ethers.getSigners();
     const Verifier = await ethers.getContractFactory("MockGroth16Verifier");
     verifier = await Verifier.deploy();
     const Platform = await ethers.getContractFactory("VotingPlatform");
@@ -44,7 +45,7 @@ describe("VotingPlatform", () => {
 
   async function createOpenElection() {
     const now = await time.latest();
-    await platform.createElection(ELECTION_ID, ROOT, now - 10, now + 3600, 11n, 22n);
+    await platform.createElection(ELECTION_ID, ROOT, now - 10, now + 3600, 11n, 22n, "QmMeta");
   }
 
   it("only owner can create elections", async () => {
@@ -52,14 +53,14 @@ describe("VotingPlatform", () => {
     await expect(
       platform
         .connect(voter)
-        .createElection(ELECTION_ID, ROOT, now, now + 100, 1n, 2n)
+        .createElection(ELECTION_ID, ROOT, now, now + 100, 1n, 2n, "QmMeta")
     ).to.be.revertedWithCustomError(platform, "OwnableUnauthorizedAccount");
   });
 
   it("creates an election and emits ElectionCreated", async () => {
     const now = await time.latest();
     await expect(
-      platform.createElection(ELECTION_ID, ROOT, now, now + 100, 1n, 2n)
+      platform.createElection(ELECTION_ID, ROOT, now, now + 100, 1n, 2n, "QmMeta")
     ).to.emit(platform, "ElectionCreated");
     const e = await platform.getElection(ELECTION_ID);
     expect(e.exists).to.equal(true);
@@ -69,7 +70,7 @@ describe("VotingPlatform", () => {
   it("rejects duplicate election ids", async () => {
     await createOpenElection();
     await expect(
-      platform.createElection(ELECTION_ID, ROOT, 0, 1, 1n, 2n)
+      platform.createElection(ELECTION_ID, ROOT, 0, 1, 1n, 2n, "QmMeta")
     ).to.be.revertedWith("Election exists");
   });
 
@@ -112,7 +113,7 @@ describe("VotingPlatform", () => {
 
   it("rejects votes outside the window", async () => {
     const now = await time.latest();
-    await platform.createElection(ELECTION_ID, ROOT, now + 1000, now + 2000, 1n, 2n);
+    await platform.createElection(ELECTION_ID, ROOT, now + 1000, now + 2000, 1n, 2n, "QmMeta");
     await expect(
       platform
         .connect(voter)
@@ -159,13 +160,57 @@ describe("VotingPlatform", () => {
     ).to.be.revertedWith("ID mismatch");
   });
 
-  it("owner publishes result CID", async () => {
+  it("owner publishes result CID after the election ends (timestamped)", async () => {
     await createOpenElection();
+    await time.increase(4000); // past endTime
     await expect(platform.setResultCID(ELECTION_ID, "QmMockResultCID"))
       .to.emit(platform, "ResultPublished")
-      .withArgs(ELECTION_ID, "QmMockResultCID");
+      .withArgs(ELECTION_ID, "QmMockResultCID", anyValue, owner.address);
     const e = await platform.getElection(ELECTION_ID);
     expect(e.resultCID).to.equal("QmMockResultCID");
+    expect(e.resultPublishedAt).to.be.gt(0n);
+  });
+
+  it("rejects publishing results before the election ends", async () => {
+    await createOpenElection();
+    await expect(
+      platform.setResultCID(ELECTION_ID, "QmEarlyCID")
+    ).to.be.revertedWith("Election not ended");
+  });
+
+  it("owner can delegate ONE election to a manager who can then publish", async () => {
+    await createOpenElection();
+    await expect(platform.setElectionManager(ELECTION_ID, manager.address))
+      .to.emit(platform, "ManagerAssigned")
+      .withArgs(ELECTION_ID, manager.address);
+    await time.increase(4000);
+    await expect(
+      platform.connect(manager).setResultCID(ELECTION_ID, "QmManagerCID")
+    )
+      .to.emit(platform, "ResultPublished")
+      .withArgs(ELECTION_ID, "QmManagerCID", anyValue, manager.address);
+  });
+
+  it("a manager's authority does not extend to other elections", async () => {
+    await createOpenElection();
+    const now = await time.latest();
+    await platform.createElection(2n, ROOT, now - 10, now + 3600, 11n, 22n, "QmMeta2");
+    await platform.setElectionManager(ELECTION_ID, manager.address);
+    await time.increase(4000);
+    await expect(
+      platform.connect(manager).setResultCID(2n, "QmSneakyCID")
+    ).to.be.revertedWith("Not election authority");
+  });
+
+  it("random accounts cannot publish results or assign managers", async () => {
+    await createOpenElection();
+    await time.increase(4000);
+    await expect(
+      platform.connect(voter).setResultCID(ELECTION_ID, "QmVoterCID")
+    ).to.be.revertedWith("Not election authority");
+    await expect(
+      platform.connect(voter).setElectionManager(ELECTION_ID, voter.address)
+    ).to.be.revertedWithCustomError(platform, "OwnableUnauthorizedAccount");
   });
 
   it("rejects a proof bound to the wrong election public key", async () => {

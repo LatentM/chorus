@@ -51,6 +51,7 @@ export const PLATFORM_ABI = [
       { name: "endTime", type: "uint256" },
       { name: "pubKeyX", type: "uint256" },
       { name: "pubKeyY", type: "uint256" },
+      { name: "metadataCid", type: "string" },
     ],
     outputs: [],
   },
@@ -96,6 +97,8 @@ export const PLATFORM_ABI = [
           { name: "pubKeyY", type: "uint256" },
           { name: "exists", type: "bool" },
           { name: "resultCID", type: "string" },
+        { name: "resultPublishedAt", type: "uint256" },
+        { name: "metadataCid", type: "string" },
         ],
       },
     ],
@@ -125,6 +128,7 @@ export const PLATFORM_ABI = [
       { name: "merkleRoot", type: "bytes32", indexed: false },
       { name: "startTime", type: "uint256", indexed: false },
       { name: "endTime", type: "uint256", indexed: false },
+      { name: "metadataCid", type: "string", indexed: false },
     ],
   },
   {
@@ -142,6 +146,33 @@ export const PLATFORM_ABI = [
     inputs: [
       { name: "electionId", type: "uint256", indexed: true },
       { name: "resultCID", type: "string", indexed: false },
+      { name: "publishedAt", type: "uint256", indexed: false },
+      { name: "publishedBy", type: "address", indexed: true },
     ],
+  },
+  {
+    type: "event",
+    name: "ManagerAssigned",
+    inputs: [
+      { name: "electionId", type: "uint256", indexed: true },
+      { name: "manager", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "function",
+    name: "setElectionManager",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "electionId", type: "uint256" },
+      { name: "manager", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "electionManagers",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "uint256" }],
+    outputs: [{ name: "", type: "address" }],
   },
 ];

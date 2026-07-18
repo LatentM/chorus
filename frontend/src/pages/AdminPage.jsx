@@ -49,7 +49,7 @@ export default function AdminPage() {
         <p className="text-sm text-muted">
           Check that <span className="font-mono">VITE_PLATFORM_ADDRESS</span> in{" "}
           <span className="font-mono">frontend/.env</span> matches your deployed
-          contract, that your wallet is on the same network the contract was deployed to (local 31337 / Sepolia 11155111 / Amoy 80002), and
+          contract, that your wallet is on the same network the contract was deployed to (local 31337 / Amoy 80002 / Polygon 137), and
           that you restarted <span className="font-mono">npm run dev</span> after
           editing .env.
         </p>
@@ -62,10 +62,22 @@ export default function AdminPage() {
     return <p className="card text-muted">Checking admin rights on-chain…</p>;
   if (!isAdmin)
     return (
-      <p className="card text-seal">
-        Connected wallet is not the platform owner ({short(owner)}). Admin
-        functions are onlyOwner on-chain.
-      </p>
+      <div className="space-y-6">
+        <div className="card">
+          <h2 className="font-display text-xl font-bold mb-1">Manager mode</h2>
+          <p className="text-sm text-muted">
+            This wallet does not hold platform-owner rights, so it cannot
+            create elections. If the platform operator has delegated an
+            election to you, you can monitor it and publish its results
+            below — authority is enforced per-election by the contract
+            itself.
+          </p>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <MonitorCard />
+          <TallyCard />
+        </div>
+      </div>
     );
 
   return (
@@ -73,8 +85,118 @@ export default function AdminPage() {
       <CreateElectionWizard />
       <div className="space-y-6">
         <MonitorCard />
+        <DelegateCard />
         <TallyCard />
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Delegate — assign per-election managers (owner only)               */
+/* ------------------------------------------------------------------ */
+function DelegateCard() {
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+  const [electionId, setElectionId] = useState("");
+  const [managerAddr, setManagerAddr] = useState("");
+  const [current, setCurrent] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function lookup() {
+    setMsg("");
+    setCurrent(null);
+    try {
+      const m = await publicClient.readContract({
+        address: PLATFORM_ADDRESS,
+        abi: PLATFORM_ABI,
+        functionName: "electionManagers",
+        args: [BigInt(electionId)],
+      });
+      setCurrent(m);
+    } catch (err) {
+      setMsg(err.shortMessage || err.message);
+    }
+  }
+
+  async function assign(addr) {
+    setBusy(true);
+    setMsg("");
+    try {
+      const hash = await writeContractAsync({
+        address: PLATFORM_ADDRESS,
+        abi: PLATFORM_ABI,
+        functionName: "setElectionManager",
+        args: [BigInt(electionId), addr],
+      });
+      await publicClient.waitForTransactionReceipt({ hash });
+      setMsg(
+        addr === "0x0000000000000000000000000000000000000000"
+          ? "Manager revoked — owner-only again."
+          : `Manager assigned: ${short(addr)}`
+      );
+      setCurrent(addr);
+    } catch (err) {
+      setMsg(err.shortMessage || err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const ZERO = "0x0000000000000000000000000000000000000000";
+
+  return (
+    <div className="card">
+      <h2 className="font-display text-xl font-bold mb-1">Delegate election</h2>
+      <p className="text-sm text-muted mb-4">
+        Hand one election's result-publishing rights to a client (e.g. a
+        ministry) — for that election only. You keep the platform and every
+        other election; revoke any time.
+      </p>
+      <div className="flex gap-2 mb-3">
+        <input
+          className="input"
+          placeholder="Election ID"
+          value={electionId}
+          onChange={(e) => setElectionId(e.target.value)}
+        />
+        <button className="btn-ghost shrink-0" onClick={lookup} disabled={!electionId}>
+          Check
+        </button>
+      </div>
+      {current !== null && (
+        <p className="text-xs font-mono text-muted mb-3">
+          Current manager:{" "}
+          {current === ZERO ? "none (owner only)" : short(current)}
+        </p>
+      )}
+      <label className="label">Manager wallet address</label>
+      <div className="flex gap-2">
+        <input
+          className="input"
+          placeholder="0x…"
+          value={managerAddr}
+          onChange={(e) => setManagerAddr(e.target.value)}
+        />
+        <button
+          className="btn-seal shrink-0"
+          disabled={!electionId || !/^0x[0-9a-fA-F]{40}$/.test(managerAddr) || busy}
+          onClick={() => assign(managerAddr)}
+        >
+          {busy ? (<><span className="spinner" /> Assigning…</>) : "Assign"}
+        </button>
+      </div>
+      {current && current !== ZERO && (
+        <button
+          className="btn-ghost mt-3"
+          disabled={busy || !electionId}
+          onClick={() => assign(ZERO)}
+        >
+          Revoke manager
+        </button>
+      )}
+      {msg && <p className="text-sm mt-3 text-muted">{msg}</p>}
     </div>
   );
 }
@@ -179,6 +301,7 @@ function CreateElectionWizard() {
           BigInt(toUnix(end)),
           BigInt(keys.pkX),
           BigInt(keys.pkY),
+          metadataCid,
         ],
       });
       await publicClient.waitForTransactionReceipt({ hash });
@@ -283,6 +406,10 @@ function MonitorCard() {
             ? `${Math.floor(remaining / 3600)}h ${Math.floor((remaining % 3600) / 60)}m`
             : "ended",
         resultCID: e.resultCID || "—",
+        publishedAt:
+          Number(e.resultPublishedAt) > 0
+            ? new Date(Number(e.resultPublishedAt) * 1000).toLocaleString()
+            : null,
       });
     } catch (err) {
       setError(err.shortMessage || err.message);
@@ -303,6 +430,11 @@ function MonitorCard() {
           <div className="col-span-2">
             <p className="label">Result CID</p>
             <p className="mono-chip">{stats.resultCID}</p>
+            {stats.publishedAt && (
+              <p className="text-xs text-muted mt-1.5 font-mono">
+                Published on-chain at {stats.publishedAt}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -344,7 +476,16 @@ function TallyCard() {
       const sk = await decryptWithPassword(keyFile.encryptedSk, password);
 
       const entry = registry.find((r) => String(r.id) === String(electionId));
-      const meta = entry?.metadataCid ? await fetchJSON(entry.metadataCid) : null;
+      // Metadata CID now lives on-chain (any machine can find it); the local
+      // registry remains only as a fallback for pre-upgrade elections.
+      const onchain = await publicClient.readContract({
+        address: PLATFORM_ADDRESS,
+        abi: PLATFORM_ABI,
+        functionName: "getElection",
+        args: [BigInt(electionId)],
+      });
+      const metaCid = onchain.metadataCid || entry?.metadataCid;
+      const meta = metaCid ? await fetchJSON(metaCid) : null;
       const candidates = meta?.candidates ?? Array.from({ length: 10 }, (_, i) => `Candidate ${i}`);
 
       push("Fetching VoteCast events…");

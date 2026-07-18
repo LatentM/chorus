@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useAccount,
   useSignMessage,
@@ -6,6 +6,7 @@ import {
   usePublicClient,
   useChainId,
 } from "wagmi";
+import { parseAbiItem } from "viem";
 import { PLATFORM_ADDRESS, PLATFORM_ABI } from "../config/contracts.js";
 import { fetchJSON, listElections } from "../lib/ipfs.js";
 import {
@@ -29,8 +30,6 @@ function explorerTxUrl(chainId, tx) {
       return `https://polygonscan.com/tx/${tx}`;
     case 80002:
       return `https://amoy.polygonscan.com/tx/${tx}`;
-    case 11155111:
-      return `https://sepolia.etherscan.io/tx/${tx}`;
     default:
       return null; // hardhat local (31337) or unknown chain
   }
@@ -81,6 +80,39 @@ function CastBallot() {
   const publicClient = usePublicClient();
   const chainId = useChainId();
 
+  // Elections known to THIS chain, derived from ElectionCreated events — so
+  // the list always reflects on-chain reality and never shows ghosts from
+  // previous local-node runs. The local registry only contributes titles.
+  const [knownElections, setKnownElections] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const logs = await publicClient.getLogs({
+          address: PLATFORM_ADDRESS,
+          event: parseAbiItem(
+            "event ElectionCreated(uint256 indexed electionId, bytes32 merkleRoot, uint256 startTime, uint256 endTime, string metadataCid)"
+          ),
+          fromBlock: 0n,
+        });
+        if (cancelled) return;
+        const ids = [...new Set(logs.map((l) => l.args.electionId.toString()))];
+        setKnownElections(
+          ids.map((id) => ({
+            id,
+            title: registry.find((r) => String(r.id) === id)?.title || "",
+          }))
+        );
+      } catch {
+        // Public RPCs may cap log ranges — quietly show nothing rather than ghosts.
+        if (!cancelled) setKnownElections([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [publicClient, chainId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const registry = useMemo(() => listElections(), []);
   const [electionId, setElectionId] = useState(registry[0]?.id?.toString() ?? "");
   const [election, setElection] = useState(null); // on-chain struct
@@ -112,12 +144,16 @@ function CastBallot() {
       if (!e.exists) throw new Error(`Election ${electionId} not found on-chain`);
       setElection(e);
 
+      // Metadata CID is stored on-chain at creation, so ANY machine can load
+      // an election from its id alone. The local registry remains only as a
+      // fallback for elections created before this upgrade.
       const entry = registry.find((r) => String(r.id) === String(electionId));
-      if (!entry?.metadataCid)
+      const metaCid = e.metadataCid || entry?.metadataCid;
+      if (!metaCid)
         throw new Error(
-          "No metadata CID known for this election in this browser. Ask the admin for the metadata CID or create the election on this machine."
+          "No metadata CID for this election (created pre-upgrade on another machine?). Ask the admin for the metadata CID."
         );
-      const meta = await fetchJSON(entry.metadataCid);
+      const meta = await fetchJSON(metaCid);
       setMetadata(meta);
 
       const treeJson = await fetchJSON(meta.merkleTreeCid);
@@ -258,9 +294,12 @@ function CastBallot() {
             Load
           </button>
         </div>
-        {registry.length > 0 && (
+        {knownElections.length > 0 && (
           <p className="text-xs text-muted mt-2">
-            Known here: {registry.map((r) => `#${r.id} ${r.title}`).join(" · ")}
+            On this chain:{" "}
+            {knownElections
+              .map((r) => `#${r.id}${r.title ? ` ${r.title}` : ""}`)
+              .join(" · ")}
           </p>
         )}
 
