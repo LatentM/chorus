@@ -27,8 +27,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <RainbowKitProvider
           initialChain={hardhat.id}
           theme={darkTheme({
-            accentColor: "#FFC943",
-            accentColorForeground: "#05121F",
+            accentColor: "#C8502E",
+            accentColorForeground: "#F0E9D8",
             borderRadius: "small",
             overlayBlur: "small",
           })}

@@ -1,5 +1,8 @@
 node_modules/
 .env
+.env.local
+**/.env
+**/.env.local
 cache/
 artifacts/
 dist/
@@ -9,3 +12,15 @@ dist/
 results.json
 merkleTree.json
 electionKeys.json
+
+# Election secrets downloaded by the app — NEVER commit these
+trustvote-election-*-key.json
+trustvote-election-*-content-key.json
+trustvote-election-*-trustee-*.json
+commitments.csv
+verification_key.json
+
+# Circuit build outputs (regenerate with circom; ceremony files are *.zkey/*.ptau above)
+circuits/build/
+circuits/circom/
+circom.exe

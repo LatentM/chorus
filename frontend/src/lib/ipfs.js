@@ -1,3 +1,5 @@
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
+
 // Browser-side IPFS via Pinata, with an offline MOCK mode (no API key):
 // mock uploads are kept in localStorage so the Admin → Voter → Verifier
 // flow works end-to-end on one machine without any Pinata account.
@@ -18,6 +20,16 @@ export function isMockCid(cid) {
 
 /** Upload JSON; returns a CID (real via Pinata, or deterministic mock). */
 export async function uploadJSON(json, name = "trustvote.json") {
+  if (BACKEND_URL) {
+    const r = await fetch(`${BACKEND_URL}/pin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: json, name }),
+    });
+    if (!r.ok) throw new Error(`Backend pin failed: ${r.status}`);
+    return (await r.json()).cid;
+  }
+
   if (!PINATA_JWT) {
     const digest = keccak256(toUtf8Bytes(JSON.stringify(json))).slice(2, 42);
     const cid = `${MOCK_PREFIX}${digest}`;
@@ -39,6 +51,13 @@ export async function uploadJSON(json, name = "trustvote.json") {
 
 /** Fetch JSON by CID (mock CIDs come from localStorage). */
 export async function fetchJSON(cid) {
+  if (BACKEND_URL) {
+    try {
+      const r = await fetch(`${BACKEND_URL}/ipfs/${cid}`, { signal: AbortSignal.timeout(8000) });
+      if (r.ok) return await r.json();
+    } catch { /* fall through to direct gateways */ }
+  }
+
   if (isMockCid(cid)) {
     const raw = localStorage.getItem(mockKey(cid));
     if (!raw)

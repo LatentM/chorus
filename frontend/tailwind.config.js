@@ -4,37 +4,41 @@ export default {
   theme: {
     extend: {
       colors: {
-        // "The counting room at night" — a polling place in its own materials
-        ink: "#0C110F",     // ballot-box steel, green-black
-        panel: "#151D19",   // booth shadow
-        edge: "#2A342E",    // worn brass hinge line
-        ballot: "#F0E9D8",  // ballot-paper cream (primary text)
-        seal: "#C8502E",    // wax-seal vermilion
-        verify: "#46A578",  // inked VERIFIED green
-        muted: "#93A096",   // sage ledger-grey
-        foil: "#C9A227",    // brass foil (focus, seal ring, accents)
+        // "Cyanotype" — a blueprint is a plan published so anyone can inspect it.
+        // Token NAMES are unchanged from the previous system on purpose, so every
+        // existing page picks up the new palette without a single edit.
+        ink: "#05121F",     // drafting-table ground — deep blue, never pure black
+        panel: "#0A2135",   // sheet laid on the table
+        edge: "#17405F",    // hairline / grid rule
+        ballot: "#E6EEF4",  // primary text — cool chalk, like blueprint linework
+        muted: "#7E9BB2",   // secondary text
+        seal: "#FF6B5A",    // FAILURE. Every `text-seal` in the app is an error.
+        verify: "#4FE0B0",  // PASS. Verdicts, matched recounts, confirmations.
+        foil: "#FFC943",    // ATTESTED. On-chain truth, focus rings, the mark.
       },
       fontFamily: {
-        display: ['"Fraunces"', "Georgia", "serif"],
-        sans: ['"Public Sans"', "system-ui", "sans-serif"],
+        // Archivo carries a width axis; held wide it reads engineered rather
+        // than editorial — the opposite of the serif it replaces.
+        display: ['"Archivo"', "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ['"Instrument Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ['"IBM Plex Mono"', "ui-monospace", "monospace"],
       },
       keyframes: {
         "spin-slow": { to: { transform: "rotate(360deg)" } },
         "fade-up": {
-          from: { opacity: "0", transform: "translateY(4px)" },
+          from: { opacity: "0", transform: "translateY(6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        // The wax stamp is gone; a verdict now snaps in like a plotter pen.
         "stamp-in": {
-          "0%": { opacity: "0", transform: "scale(1.4) rotate(-8deg)" },
-          "60%": { opacity: "1", transform: "scale(0.96) rotate(-2deg)" },
-          "100%": { opacity: "1", transform: "scale(1) rotate(-2deg)" },
+          "0%": { opacity: "0", transform: "translateY(6px) scaleX(0.94)" },
+          "100%": { opacity: "1", transform: "translateY(0) scaleX(1)" },
         },
       },
       animation: {
         "spin-slow": "spin-slow 48s linear infinite",
-        "fade-up": "fade-up 0.35s ease-out both",
-        "stamp-in": "stamp-in 0.45s cubic-bezier(0.2, 1.2, 0.4, 1) both",
+        "fade-up": "fade-up 0.38s cubic-bezier(0.2, 0.7, 0.3, 1) both",
+        "stamp-in": "stamp-in 0.4s cubic-bezier(0.2, 0.9, 0.3, 1) both",
       },
     },
   },

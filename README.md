@@ -1,10 +1,43 @@
 # TrustVote
 
 A zero-knowledge, blockchain-based voting platform with end-to-end
-verifiability. 
+verifiability. Targets **Polygon** — a local Hardhat chain for development,
+**Polygon Amoy** for public testing, and **Polygon mainnet** for production.
+Sub-cent transaction costs make per-ballot gas practical; the contracts are
+chain-agnostic EVM, so any EVM network can be added in
+`contracts/hardhat.config.js` and `frontend/src/main.jsx`.
 
+- **Ballot secrecy** — exponential ElGamal on BabyJubJub; nobody (including the
+  operator) can see an individual vote.
+- **One-person-one-vote** — Poseidon nullifiers `Poseidon(secretKey, electionId)`
+  enforced on-chain.
+- **Eligibility without identity** — Poseidon Merkle tree membership proven in
+  zero knowledge (Groth16 / Circom).
+- **Public auditability** — Chaum-Pedersen DLEQ proofs let anyone verify every
+  decryption and re-tally the election.
+
+```
+trustvote/
+├── contracts/   Hardhat · VotingPlatform.sol · Groth16Verifier.sol (ceremony output) · tests · deploy
+├── circuits/    Circom 2.1.5 · VotingCircuit.circom (depth 20, 10 candidates)
+├── scripts/     Node ESM · deriveCommitments.js · generateMerkleTree.js · generateKeys.js · tally.js · pinata.js
+├── backend/     Optional Node service · gasless relayer · Pinata proxy · event indexer
+└── frontend/    React 18 + Vite 5 · wagmi 2 · RainbowKit 2 · snarkjs · Tailwind
+```
 
 ## Quick start
+
+### 0. Prerequisites
+
+- Node.js ≥ 18, npm
+- Node.js ≥ 18, npm (Node 20 LTS recommended on Windows — Node 22 can emit a
+  harmless libuv assertion after Hardhat commands complete)
+- MetaMask (or any RainbowKit-supported wallet). For local development, add a
+  network manually: RPC `http://127.0.0.1:8545`, chain id `31337`.
+- **For public testnet deploys only:** test POL from
+  https://faucet.polygon.technology (Polygon Amoy, chain id 80002). Other
+  faucets worth trying if that one is rationing: https://faucets.chain.link
+  and the Polygon Discord faucet channel.
 
 ### 1. Contracts
 
@@ -29,17 +62,23 @@ test ETH. ⚠️ Dev keys only; never use them anywhere real. If you restart the
 node later, redeploy and clear MetaMask's activity (Settings → Advanced →
 Clear activity tab data) to reset stale nonces.
 
-
-**Option B — Polygon Amoy** (`.env` needs `PRIVATE_KEY`; POL from
-https://faucet.polygon.technology):
+**Option B — Polygon Amoy testnet** (`cp .env.example .env`, set
+`PRIVATE_KEY`; test POL from https://faucet.polygon.technology):
 
 ```bash
 npm run deploy:amoy
 ```
 
-Whichever you choose, copy the printed `VotingPlatform` address. The frontend
-supports all three networks at once — it simply talks to whichever network
-your wallet is switched to.
+**Option C — Polygon mainnet** (⚠️ real funds; set `PRIVATE_KEY` and
+optionally `POLYGON_RPC_URL`):
+
+```bash
+npx hardhat run scripts/deploy.js --network polygon
+```
+
+Whichever you choose, copy the printed `VotingPlatform` address into
+`frontend/.env`. The frontend supports all three networks at once — it simply
+talks to whichever network your wallet is switched to.
 
 ### 2. Frontend
 
@@ -52,3 +91,227 @@ cp .env.example .env
 # optionally set VITE_PINATA_JWT (see Pinata setup below)
 npm run dev                  # ✅ acceptance: http://localhost:3000
 ```
+
+### 3. Run a full mock election (no ZK ceremony needed)
+
+The deployed verifier is a **mock that accepts every proof**, so the entire
+Admin → Voter → Verifier lifecycle works before the circuit is compiled:
+
+1. **Registration phase.** The admin announces the upcoming *Election ID*.
+   Each voter opens **Voter tab → Register**, enters the ID, signs
+   `TrustVote Election: <id>`, and sends the derived **commitment**
+   (`Poseidon(BabyPbk(secretKey).Ax)`) to the admin. For a one-machine demo,
+   `cd scripts && node deriveCommitments.js 1` derives commitments for the
+   8 standard Hardhat dev accounts into `commitments.csv`.
+2. **Admin tab** (connect the deployer wallet): fill in the wizard, upload
+   the collected `commitments.csv`, set a vault password, click
+   *Build tree · upload · createElection*. The encrypted ElGamal private key
+   downloads automatically — keep it.
+3. **Voter tab → Cast a ballot** (connect a registered wallet): load the
+   election, optionally *Check my registration*, pick a candidate, *Cast
+   anonymous vote*. You'll sign `TrustVote Election: <id>` (secret
+   derivation), then the app rebuilds your commitment, extracts the Merkle
+   proof, computes the nullifier, ElGamal-encrypts the ballot, generates a
+   (mock or real) proof in a Web Worker, and submits `castVote`. Save the
+   nullifier from the receipt. *Verify my vote* re-derives the nullifier and
+   checks it on-chain.
+4. **Admin tab → Tally**: after `endTime`, upload the key vault, enter the
+   password, *Decrypt · prove · publish*. This fetches all `VoteCast` events,
+   decrypts each ballot, brute-forces the small discrete log, generates a
+   Chaum-Pedersen proof per decryption, uploads `results.json` to IPFS, and
+   calls `setResultCID`.
+5. **Verifier tab** (any wallet or none): enter the election id → the page
+   pulls events from the public RPC, results from IPFS, verifies every
+   Chaum-Pedersen proof, re-tallies, and shows the **VERIFIED** badge.
+
+CLI equivalents live in `/scripts`:
+
+```bash
+cd scripts && npm install
+node deriveCommitments.js 1                # registration (demo: Hardhat keys)
+node generateMerkleTree.js commitments.csv # depth-20 tree + IPFS upload
+node generateKeys.js                       # ElGamal keypair
+PLATFORM_ADDRESS=0x... node tally.js 1     # decrypt + prove + publish
+```
+
+> **Mock IPFS:** with no Pinata key configured, uploads get deterministic
+> `QmMOCK…` CIDs stored locally (browser `localStorage` / `scripts/.mock-ipfs/`),
+> so the full flow works offline on one machine.
+
+### 4. Going real: compile the circuit & replace the mock verifier
+
+See `circuits/README.md` for the full ceremony. Summary:
+
+```bash
+circom circuits/VotingCircuit.circom --r1cs --wasm --sym -o circuits/build -l circuits/node_modules
+snarkjs powersoftau new bn128 16 pot16_0000.ptau
+snarkjs powersoftau contribute pot16_0000.ptau pot16_0001.ptau --name="First"
+snarkjs powersoftau prepare phase2 pot16_0001.ptau pot16_final.ptau
+snarkjs groth16 setup circuits/build/VotingCircuit.r1cs pot16_final.ptau circuit_0000.zkey
+snarkjs zkey contribute circuit_0000.zkey circuit_final.zkey --name="Contributor"
+snarkjs zkey export solidityverifier circuit_final.zkey contracts/contracts/Groth16Verifier.sol
+cp circuits/build/VotingCircuit_js/VotingCircuit.wasm frontend/public/circuits/
+cp circuit_final.zkey frontend/public/circuits/
+```
+
+Redeploy, and the voter page automatically switches from mock to real Groth16
+proofs once `frontend/public/circuits/` contains both artifacts (it then also
+submits the prover's own public signals verbatim).
+
+The circuit is complete — real in-circuit ElGamal (`C1 = g·r`,
+`C2 = h·r + g·vote` via EscalarMulFix/EscalarMulAny/BabyAdd), 9 public
+signals `[root, electionId, nullifier, c1x, c1y, c2x, c2y, pubKeyX, pubKeyY]`
+pinned by the contract, and a commitment-based voter tree matching the
+circuit's leaf exactly — but it has **not yet been compiled** (this repo was
+authored offline), so budget time for compiler nits before the ceremony.
+
+## Pinata (IPFS) setup
+
+1. Create a free account at https://app.pinata.cloud
+2. API Keys → New Key → enable `pinJSONToIPFS` → copy the **JWT**.
+3. Put it in `frontend/.env` as `VITE_PINATA_JWT=` and export
+   `PINATA_JWT=` for the CLI scripts.
+
+Uploaded artifacts: `merkleTree.json`, election metadata, and
+`results.json` (tally + decryption proofs).
+
+## Cryptographic primitives (spec §5)
+
+| Primitive | Usage |
+|---|---|
+| Poseidon | Merkle leaves & nodes, nullifier derivation (SNARK-friendly) |
+| BabyJubJub | ElGamal encryption, key derivation (native to BN254) |
+| Groth16 | ZK proof system (~256-byte proofs, ~200k gas verification) |
+| ElGamal | Ballot confidentiality (additively homomorphic) |
+| Merkle tree | Voter eligibility without revealing identity |
+| Nullifier | Double-vote prevention, unlinkable to the address |
+| Chaum-Pedersen DLEQ | Publicly verifiable decryption |
+
+## 10-week implementation plan (spec §10)
+
+**Phase 1 — Foundation (Weeks 1–2).** Monorepo setup (`/contracts` Hardhat,
+`/frontend` Vite+React). Deploy mock Groth16Verifier and VotingPlatform with
+Hardhat unit tests for the election lifecycle. Frontend skeleton with
+RainbowKit/wagmi/Tailwind, wallet connection, Amoy network switch, static
+election list. *Deliverable:* page that connects MetaMask and calls a mock
+castVote.
+
+**Phase 2 — ZK circuit & on-chain verification (Weeks 3–4).** Write
+VotingCircuit.circom (Merkle proof, nullifier, ElGamal, 1-out-of-N check);
+test with circom_tester/snarkjs; simulated trusted setup; export the Solidity
+verifier and integrate it; Hardhat tests submitting real proofs and rejecting
+tampered inputs. *Deliverable:* circuit tested, real verifier deployed.
+
+**Phase 3 — Voting frontend integration (Weeks 5–6).** Sample 50-address
+voter list → Poseidon Merkle tree → Pinata; browser proof computation for the
+connected address; Web Worker snarkjs proving with progress UX; castVote
+wiring and error handling; Verify-my-vote page. *Deliverable:* complete voter
+journey on Amoy.
+
+**Phase 4 — Admin dashboard & decryption (Weeks 7–8).** Create-election
+wizard (CSV upload, auto tree build, IPFS upload, client-side key generation);
+Node tally script (fetch events, decrypt, Chaum-Pedersen proofs); results
+publishing and the public verifier page. *Deliverable:* full lifecycle
+create → vote → tally → verify demonstrable.
+
+**Phase 5 — Polish, testing, documentation (Weeks 9–10).** Loading states,
+error messages, responsive design; security/edge-case tests (double vote,
+ineligible voter, wrong election id/root, 10k-voter proof benchmark); project
+report, demo video, README; deploy frontend to Vercel/Netlify and verify the
+contract on Polygonscan. *Deliverable:* submission-ready project.
+
+## Election visibility: public & private
+
+Every election is created as either:
+
+- **Public (default):** metadata, voter tree, and results are plaintext on
+  IPFS — anyone on Earth can run the Verifier's full audit with no
+  permission, keys, or account. This is the flagship mode.
+- **Private:** the same three artifacts are AES-256-GCM encrypted with a
+  random **content key** (downloaded at creation) before pinning. The chain
+  pins the same CIDs, so tamper-evidence is identical; only readability
+  changes. The organiser distributes the key file to eligible voters (needed
+  to load the election and build proofs) and designated auditors (needed to
+  run the Verifier). On-chain facts — election existence, ballot count,
+  publication time and authority — remain publicly checkable even for
+  private elections. No contract changes are involved: encrypted artifacts
+  are self-describing envelopes detected on fetch.
+
+## Platform governance
+
+- **Per-election delegation:** the platform owner can hand result-publishing
+  rights for ONE election to a client wallet via
+  `setElectionManager(electionId, manager)` (and revoke with the zero
+  address). The manager's authority never extends to creating elections or to
+  any other election — designed for "we operate the platform, the client runs
+  their election" arrangements.
+- **Timestamped, end-gated publication:** `setResultCID` reverts until the
+  voting window has closed and records `resultPublishedAt = block.timestamp`
+  on-chain (also emitted in `ResultPublished` with the publisher's address),
+  so observers can verify results were not announced early and know exactly
+  when — and by whom — they appeared.
+
+## Production services (backend/)
+
+A single optional Node service (`cd backend && cp .env.example .env && npm
+install && npm start`, default port 8787) provides:
+
+- **Gasless voting relayer** (`POST /relay`) — voters submit ballots without
+  paying gas; the relayer wallet pays. Sound by construction: `castVote`
+  never reads `msg.sender` — identity is the nullifier and eligibility is
+  the Groth16 proof, so who pays gas is irrelevant. The relayer dry-runs
+  every ballot (`staticCall`) so invalid submissions cost it nothing, and
+  rate-limits per IP. Enable in the frontend with
+  `VITE_BACKEND_URL=http://localhost:8787` (a "Gasless" toggle appears).
+- **Pinata proxy** (`POST /pin`, `GET /ipfs/:cid`) — the Pinata JWT lives
+  server-side only; the browser bundle carries no credential. Falls back to
+  mock CIDs without a JWT.
+- **Event indexer** (`GET /elections`) — cached `ElectionCreated` list for
+  instant election discovery without client-side log scans.
+
+## Key custody: single vault or trustee shares
+
+At creation the operator chooses: a **single password vault** (as before), or
+**trustee shares (t of n)** — the election key is Shamir-split over the
+BabyJubJub subgroup order into n share files for n custodians; any t
+reconstruct it at tally time, fewer than t reveal nothing, and the complete
+key is never stored anywhere. The Tally card accepts either a vault or a set
+of share files. (Roadmap: full threshold *decryption*, where shares are never
+combined and each trustee submits a partial decryption with its own proof.)
+
+## Designed but deliberately not implemented (and why)
+
+- **Re-votes before close** (coercion mitigation): a naive
+  last-ballot-counts rule is UNSOUND here — Groth16 proofs are not bound to
+  submission time, so an adversary could replay a voter's earlier ballot
+  after they re-vote, silently reinstating the old choice. Sound re-voting
+  requires a freshness counter inside the circuit's public signals — i.e. a
+  new circuit and ceremony. Documented for the roadmap rather than hacked.
+- **Homomorphic aggregation** (decrypt only totals, never ballots): requires
+  per-candidate ciphertext vectors with an in-circuit "exactly one 1" proof —
+  likewise a new circuit and ceremony. Exponential ElGamal was chosen
+  precisely to enable this upgrade path.
+
+## Security notes / known TODOs
+
+- `Groth16Verifier.sol` is a **mock** (accepts all proofs) until the ceremony
+  runs — clearly unsafe for anything but development. It is inherently a
+  build artifact of `snarkjs zkey export solidityverifier`; there is no way
+  to write it by hand.
+- The circuit, contracts, and clients have **not been compiled or executed
+  end-to-end** — run `npm install && npx hardhat test` in `/contracts`, the
+  circom pipeline in `/circuits`, and a witness sanity test (especially the
+  `vote = 0` identity-point edge, see `circuits/README.md`) before trusting
+  the stack.
+- **Design deviation from spec §6.2 (documented):** the verifier interface is
+  `uint[9]`, not `uint[7]` — the two extra signals bind the ElGamal election
+  key inside the proof and are checked against on-chain storage
+  (`Pubkey mismatch`). Without this, a prover could encrypt under an
+  arbitrary key and submit a permanently undecryptable (spoiled) ballot.
+- **Registration phase (resolves the spec §4.2 vs §7 leaf mismatch):** the
+  Merkle leaf is the voter commitment `Poseidon(BabyPbk(sk).Ax)` exactly as
+  the circuit derives it. Voters register commitments before election
+  creation (Voter tab → Register / `scripts/deriveCommitments.js`); Ethereum
+  addresses never enter the tree, which also removes the address↔ballot
+  linkability the address-leaf design would have had.
+- Use a real multi-party Powers of Tau ceremony before any production use.

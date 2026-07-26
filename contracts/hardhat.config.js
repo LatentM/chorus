@@ -16,11 +16,6 @@ module.exports = {
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 80002,
     },
-    sepolia: {
-      url: process.env.SEPOLIA_RPC_URL || "",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 11155111,
-    },
     polygon: {
       // MAINNET — transactions cost real POL. Deploy deliberately.
       url: process.env.POLYGON_RPC_URL || "https://polygon-rpc.com",
@@ -30,11 +25,10 @@ module.exports = {
   },
   etherscan: {
     // For `npx hardhat verify --network amoy <address>`
-    // or `npx hardhat verify --network sepolia <address>`
+    // or `npx hardhat verify --network polygon <address>`
     apiKey: {
       polygonAmoy: process.env.POLYGONSCAN_API_KEY || "",
       polygon: process.env.POLYGONSCAN_API_KEY || "",
-      sepolia: process.env.ETHERSCAN_API_KEY || "",
     },
   },
 };

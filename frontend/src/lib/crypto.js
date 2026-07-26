@@ -367,3 +367,127 @@ export function downloadJSON(obj, filename) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// ---------------------------------------------------------------------------
+// Private elections — artifact envelope encryption
+// A random 256-bit CONTENT KEY encrypts the election's IPFS artifacts
+// (metadata, tree, results). The chain still pins the CIDs, so integrity is
+// identical to public elections; only readability changes. The client
+// distributes the key file to eligible voters and designated auditors.
+// Envelopes are self-describing ({ tv: "enc1" }), so clients detect private
+// artifacts on fetch — no on-chain flag required.
+// ---------------------------------------------------------------------------
+
+/** Random 256-bit content key as hex. */
+export function generateContentKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function contentCryptoKey(hex, usage) {
+  const raw = new Uint8Array(hex.match(/.{2}/g).map((h) => parseInt(h, 16)));
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, [usage]);
+}
+
+/** True if a fetched artifact is a private-election envelope. */
+export function isEncryptedArtifact(obj) {
+  return !!obj && typeof obj === "object" && obj.tv === "enc1" && !!obj.data;
+}
+
+/** Encrypt any JSON-serialisable artifact under the content key (hex). */
+export async function encryptArtifact(obj, keyHex) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await contentCryptoKey(keyHex, "encrypt");
+  const ct = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(JSON.stringify(obj))
+  );
+  return { tv: "enc1", alg: "AES-256-GCM", iv: b64(iv), data: b64(ct) };
+}
+
+/** Decrypt an enc1 envelope back to the original JSON artifact. */
+export async function decryptArtifact(env, keyHex) {
+  if (!isEncryptedArtifact(env)) return env;
+  const key = await contentCryptoKey(keyHex, "decrypt");
+  const pt = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: unb64(env.iv) },
+    key,
+    unb64(env.data)
+  );
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+
+// ---------------------------------------------------------------------------
+// Threshold key custody — Shamir secret sharing over the BabyJubJub subgroup
+// order. The election secret key is split into n trustee shares; any t of
+// them reconstruct it at tally time, and fewer than t reveal nothing.
+// Eliminates the single vault file as a point of loss or leakage.
+// (Roadmap: true threshold DECRYPTION, where shares are never combined and
+// each trustee contributes a partial decryption with its own CP proof.)
+// ---------------------------------------------------------------------------
+
+const SUBGROUP_ORDER =
+  2736030358979909402780800718157159386076813972158567259200215660948447373041n;
+
+const modL = (x) => ((x % SUBGROUP_ORDER) + SUBGROUP_ORDER) % SUBGROUP_ORDER;
+
+function modInvL(a) {
+  // extended Euclid
+  let [old_r, r] = [modL(a), SUBGROUP_ORDER];
+  let [old_s, s] = [1n, 0n];
+  while (r !== 0n) {
+    const q = old_r / r;
+    [old_r, r] = [r, old_r - q * r];
+    [old_s, s] = [s, old_s - q * s];
+  }
+  return modL(old_s);
+}
+
+function randScalarL() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let x = 0n;
+  for (const b of bytes) x = (x << 8n) | BigInt(b);
+  return modL(x);
+}
+
+/**
+ * Split secret (bigint/string) into n shares with threshold t.
+ * Returns [{ index, share }] — index is the x-coordinate (1..n),
+ * share is f(index) for a random degree-(t-1) polynomial with f(0)=secret.
+ */
+export function shamirSplit(secret, t, n) {
+  const s = modL(BigInt(secret));
+  if (t < 2 || t > n) throw new Error("Require 2 <= threshold <= total shares");
+  const coeffs = [s];
+  for (let i = 1; i < t; i++) coeffs.push(randScalarL());
+  const shares = [];
+  for (let x = 1n; x <= BigInt(n); x++) {
+    let y = 0n;
+    let xp = 1n;
+    for (const c of coeffs) {
+      y = modL(y + c * xp);
+      xp = modL(xp * x);
+    }
+    shares.push({ index: Number(x), share: y.toString() });
+  }
+  return shares;
+}
+
+/** Reconstruct the secret from >= t shares via Lagrange interpolation at 0. */
+export function shamirCombine(shares) {
+  let secret = 0n;
+  for (const { index: i, share } of shares) {
+    const xi = BigInt(i);
+    let num = 1n;
+    let den = 1n;
+    for (const { index: j } of shares) {
+      if (j === i) continue;
+      const xj = BigInt(j);
+      num = modL(num * modL(-xj));
+      den = modL(den * modL(xi - xj));
+    }
+    secret = modL(secret + BigInt(share) * num * modInvL(den));
+  }
+  return secret.toString();
+}

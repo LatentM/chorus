@@ -3,41 +3,63 @@
 @tailwind utilities;
 
 /* ————————————————————————————————————————————————————————————————
-   TrustVote · "The counting room at night"
-   Ballot-paper cream on ballot-box steel; wax vermilion; brass foil.
+   TrustVote · "Cyanotype"
+
+   A blueprint is a plan published so that anyone can inspect it. That is
+   also this system's entire claim, so it is the ground: deep drafting blue,
+   an 8px/64px engineering grid, chalk linework.
+
+   Colour is never decorative here. Three accents, three meanings:
+     foil   (amber)  — attested on-chain
+     verify (aqua)   — check passed
+     seal   (coral)  — check failed
+   Everything else is blue and chalk. That restraint is the design.
    ———————————————————————————————————————————————————————————————— */
 
 @layer base {
   body {
     @apply bg-ink text-ballot font-sans antialiased;
-    /* lamplight over the ballot box + faint paper grain */
+    font-size: 15px;
+    line-height: 1.6;
+
+    /* The drafting grid. 8px fine, 64px major — sits under everything, quietly. */
     background-image:
-      radial-gradient(1100px 480px at 50% -12%, rgba(201, 162, 39, 0.07), transparent 62%),
-      radial-gradient(900px 600px at 85% 110%, rgba(200, 80, 46, 0.05), transparent 55%),
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+      linear-gradient(rgba(23, 64, 95, 0.5) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(23, 64, 95, 0.5) 1px, transparent 1px),
+      linear-gradient(rgba(23, 64, 95, 0.2) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(23, 64, 95, 0.2) 1px, transparent 1px);
+    background-size: 64px 64px, 64px 64px, 8px 8px, 8px 8px;
+    background-position: -1px -1px;
     background-attachment: fixed;
   }
 
-  ::selection {
-    background: rgba(201, 162, 39, 0.35);
-    color: #f0e9d8;
+  /* Display face held wide on the width axis. The width IS the personality. */
+  .font-display {
+    font-variation-settings: "wdth" 118;
+    letter-spacing: -0.015em;
+    line-height: 1.08;
+    text-wrap: balance;
   }
 
-  /* Brass focus ring everywhere — keyboard users get the foil treatment */
+  ::selection {
+    background: #ffc943;
+    color: #05121f;
+  }
+
   :focus-visible {
-    outline: 2px solid #c9a227;
+    outline: 2px solid #ffc943;
     outline-offset: 2px;
     border-radius: 2px;
   }
 
   ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-track { background: #0c110f; }
+  ::-webkit-scrollbar-track { background: #05121f; }
   ::-webkit-scrollbar-thumb {
-    background: #2a342e;
+    background: #17405f;
     border-radius: 5px;
-    border: 2px solid #0c110f;
+    border: 2px solid #05121f;
   }
-  ::-webkit-scrollbar-thumb:hover { background: #93a096; }
+  ::-webkit-scrollbar-thumb:hover { background: #7e9bb2; }
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -49,134 +71,118 @@
 }
 
 @layer components {
-  /* ——— Ballot slip: every card is a paper form with a perforated tear-off top */
+  /* ——— A card is a sheet on the drafting table. The amber corner tick makes
+         it read as a drawn object rather than a rounded rectangle. ——— */
   .card {
     @apply relative bg-panel border border-edge p-6;
-    border-radius: 3px 3px 10px 10px;
-    box-shadow:
-      0 1px 0 rgba(240, 233, 216, 0.04) inset,
-      0 12px 32px -18px rgba(0, 0, 0, 0.9);
+    border-radius: 3px;
   }
-  .card::before {
-    /* perforation: punched holes along the tear line */
+  .card::after {
     content: "";
     position: absolute;
     top: -1px;
-    left: 10px;
-    right: 10px;
-    height: 2px;
-    background-image: radial-gradient(circle, #0c110f 1.6px, transparent 1.8px);
-    background-size: 12px 2px;
-    background-repeat: repeat-x;
+    left: -1px;
+    width: 10px;
+    height: 10px;
+    border-top: 1px solid #ffc943;
+    border-left: 1px solid #ffc943;
+    opacity: 0.65;
+    pointer-events: none;
   }
 
-  /* ——— Buttons: cast / secondary / verify. Press = the stamp coming down. */
+  /* ——— Buttons. Mono, uppercase, wide-tracked: they read as controls on an
+         instrument, not as marketing. Primary spends contrast, not colour —
+         amber stays reserved for meaning. ——— */
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-[3px]
-      font-semibold text-sm tracking-wide transition-all duration-150
-      disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none;
+      font-mono text-xs uppercase tracking-[0.1em] font-medium
+      transition-all duration-150
+      disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn:active:not(:disabled) { transform: translateY(1px); }
 
+  /* Primary action. NOTE: deliberately NOT `bg-seal` — `seal` is the failure
+     colour in this system. Changing this to a colour fill will break the
+     app's error semantics. */
   .btn-seal {
-    @apply btn bg-seal text-ballot;
-    box-shadow:
-      0 2px 0 #7e2f18,
-      0 8px 20px -8px rgba(200, 80, 46, 0.55);
+    @apply btn bg-ballot text-ink font-semibold;
+    border: 1px solid #e6eef4;
   }
-  .btn-seal:hover:not(:disabled) { background: #da6440; }
-  .btn-seal:active:not(:disabled) { box-shadow: 0 1px 0 #7e2f18; }
+  .btn-seal:hover:not(:disabled) { background: #ffffff; border-color: #ffffff; }
+
+  .btn-verify {
+    @apply btn bg-verify text-ink font-semibold;
+    border: 1px solid #4fe0b0;
+  }
+  .btn-verify:hover:not(:disabled) { filter: brightness(1.08); }
 
   .btn-ghost {
     @apply btn border border-edge text-ballot bg-transparent;
   }
   .btn-ghost:hover:not(:disabled) {
-    border-color: #93a096;
-    background: rgba(240, 233, 216, 0.04);
+    border-color: #7e9bb2;
+    background: rgba(23, 64, 95, 0.35);
   }
 
-  .btn-verify {
-    @apply btn bg-verify text-ink;
-    box-shadow:
-      0 2px 0 #23543c,
-      0 8px 20px -8px rgba(70, 165, 120, 0.5);
-  }
-  .btn-verify:hover:not(:disabled) { background: #55b787; }
-  .btn-verify:active:not(:disabled) { box-shadow: 0 1px 0 #23543c; }
-
-  /* ——— Sub-tabs (Register / Cast / Verify): ballot-folder pills */
+  /* ——— Sub-tabs: a rule under the active item, nothing more. ——— */
   .subtab {
-    @apply px-4 py-2 rounded-[3px] text-sm font-semibold tracking-wide
-      border transition-all duration-150;
+    @apply px-4 py-2 font-mono text-xs uppercase tracking-[0.12em]
+      border-b-2 transition-colors duration-150 bg-transparent;
   }
-  .subtab-on {
-    @apply subtab bg-seal border-seal text-ballot;
-    box-shadow: 0 2px 0 #7e2f18;
-  }
-  .subtab-off {
-    @apply subtab bg-transparent border-edge text-muted;
-  }
-  .subtab-off:hover { @apply text-ballot border-muted; }
+  .subtab-on   { @apply subtab border-foil text-foil; }
+  .subtab-off  { @apply subtab border-transparent text-muted; }
+  .subtab-off:hover { @apply text-ballot; }
 
-  /* ——— Ledger input: a line to write on, not a box to fill */
+  /* ——— Inputs sit recessed into the table. ——— */
   .input {
-    @apply w-full bg-ink/60 border border-edge rounded-[3px] px-3 py-2
+    @apply w-full bg-ink border border-edge rounded-[3px] px-3 py-2
       text-ballot placeholder-muted font-mono text-sm transition-colors;
   }
   .input:focus {
     outline: none;
-    border-color: #c9a227;
-    box-shadow: 0 1px 0 #c9a227;
+    border-color: #ffc943;
   }
 
   .label {
-    @apply block text-[11px] uppercase tracking-[0.18em] text-muted mb-1.5
-      font-semibold;
+    @apply block font-mono text-[11px] uppercase tracking-[0.16em] text-muted mb-1.5;
   }
 
   .mono-chip {
-    @apply font-mono text-xs bg-ink/70 border border-edge rounded-[3px]
+    @apply font-mono text-xs bg-ink border border-edge rounded-[3px]
       px-2.5 py-1.5 break-all leading-relaxed;
   }
 
-  /* ——— The official stamp: receipts & verdicts get inked */
+  /* ——— A result panel. Was a rotated wax stamp; now it sits square, with a
+         weighted left rule — the margin mark an auditor makes. ——— */
   .stamped {
-    @apply relative border-2 rounded-[6px] p-5;
-    border-color: currentColor;
-    transform: rotate(-0.6deg);
-  }
-  .stamped::after {
-    content: "";
-    position: absolute;
-    inset: 4px;
-    border: 1px solid currentColor;
-    border-radius: 3px;
-    opacity: 0.45;
-    pointer-events: none;
+    @apply relative border border-edge rounded-[3px] p-5 bg-ink;
+    border-left: 3px solid currentColor;
   }
 
+  /* ——— The verdict. The one place type gets loud. ——— */
   .verdict {
-    @apply inline-block font-display font-black tracking-[0.14em] text-base
-      border-2 rounded-[4px] px-5 py-2 animate-stamp-in;
-    border-color: currentColor;
-    box-shadow: inset 0 0 0 1px currentColor;
+    @apply inline-block font-display font-black uppercase
+      tracking-[0.2em] text-base px-5 py-2 rounded-[2px] animate-stamp-in;
+    font-variation-settings: "wdth" 125;
+    border: 1px solid currentColor;
+    box-shadow: inset 0 0 0 3px rgba(5, 18, 31, 0.9), inset 0 0 0 4px currentColor;
   }
 
-  /* ——— Progress ledger: each step fades in like a line being written */
-  .log-line { @apply animate-fade-up; }
+  /* ——— Progress ledger ——— */
+  .log-line { @apply animate-fade-up font-mono text-xs; }
 
-  /* ——— Ledger key-value row: dotted leader between key and value */
+  /* ——— Ledger key/value with a dotted leader. The leader is doing real work:
+         it ties a short label to a 66-character hash across a wide panel. ——— */
   .kv { @apply flex items-baseline gap-2 text-sm; }
-  .kv-k { @apply text-muted shrink-0; }
+  .kv-k { @apply text-muted shrink-0 font-mono text-[11px] uppercase tracking-[0.1em]; }
   .kv-leader {
     @apply flex-1 self-center;
-    border-bottom: 1px dotted #2a342e;
+    border-bottom: 1px dotted #17405f;
     transform: translateY(-2px);
     min-width: 1.5rem;
   }
-  .kv-v { @apply text-right shrink-0 max-w-[60%] break-all tabular-nums; }
+  .kv-v { @apply text-right shrink-0 max-w-[60%] break-all tabular-nums font-mono text-[13px]; }
 
-  /* ——— Inline spinner (uses currentColor; pairs with button text) */
   .spinner {
     @apply inline-block w-3.5 h-3.5 rounded-full align-middle;
     border: 2px solid currentColor;
@@ -184,33 +190,84 @@
     animation: spin-slow 0.7s linear infinite;
   }
 
-  /* ——— Big ledger stat */
   .stat-v {
     @apply font-display font-black text-3xl leading-none tabular-nums;
-    font-variant-numeric: tabular-nums;
+    font-variation-settings: "wdth" 118;
   }
 
-  /* ——— Audit table */
-  .audit-table { @apply w-full text-sm border-collapse; }
+  /* ——— Audit table ——— */
+  .audit-table { @apply w-full text-sm border-collapse font-mono; }
   .audit-table thead th {
-    @apply text-left text-[11px] uppercase tracking-[0.14em] text-muted
-      font-semibold pb-2 border-b border-edge;
+    @apply text-left text-[10px] uppercase tracking-[0.16em] text-muted
+      font-medium pb-2 border-b border-edge;
   }
   .audit-table thead th.num, .audit-table td.num { @apply text-right; }
   .audit-table tbody td {
-    @apply py-2.5 border-b border-edge/60 tabular-nums;
+    @apply py-2.5 border-b border-edge/50 tabular-nums text-[13px];
   }
   .audit-table tbody tr:last-child td { border-bottom: 0; }
 
-  /* ——— Ballot option rows */
+  /* ——— Ballot rows. Selected = a filled left rule: the mark you'd make on
+         paper, translated. No checkbox chrome. ——— */
   .ballot-row {
     @apply flex items-center gap-3 border border-edge rounded-[3px] px-4 py-3
       cursor-pointer transition-all duration-150 select-none;
   }
-  .ballot-row:hover { border-color: #93a096; }
+  .ballot-row:hover { border-color: #7e9bb2; }
   .ballot-row-on {
-    border-color: #c8502e;
-    background: rgba(200, 80, 46, 0.08);
-    box-shadow: inset 3px 0 0 #c8502e;
+    border-color: #ffc943;
+    background: rgba(255, 201, 67, 0.07);
+    box-shadow: inset 3px 0 0 #ffc943;
   }
+}
+
+/* ——— The hero figure: a Merkle authentication path ——— */
+
+.tree-edge { stroke: #17405f; stroke-width: 1.25; fill: none; }
+
+.tree-edge-lit {
+  stroke: #ffc943;
+  stroke-width: 2;
+  fill: none;
+  stroke-dasharray: var(--len, 200);
+  animation: tv-draw 0.52s ease-out both;
+}
+
+.tree-node { fill: #17405f; }
+
+.tree-node-lit {
+  fill: #ffc943;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tv-node 0.3s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+/* The voter's own leaf never resolves. That is the point of the figure. */
+.tree-leaf-secret {
+  fill: none;
+  stroke: #ffc943;
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+  animation: tv-pulse 2.4s ease-in-out infinite;
+}
+
+.tree-caption {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  fill: #7e9bb2;
+  text-transform: uppercase;
+}
+.tree-caption-lit { fill: #ffc943; }
+
+@keyframes tv-draw  { from { stroke-dashoffset: var(--len, 200); } to { stroke-dashoffset: 0; } }
+@keyframes tv-node  { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
+@keyframes tv-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+@media (max-width: 640px) {
+  body { background-size: 32px 32px, 32px 32px, 8px 8px, 8px 8px; }
+  .card { @apply p-4; }
+  .kv { @apply flex-col items-start gap-0.5; }
+  .kv-leader { display: none; }
+  .kv-v { @apply text-left max-w-full; }
 }

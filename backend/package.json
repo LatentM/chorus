@@ -1,0 +1,12 @@
+{
+  "name": "trustvote-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node --env-file=.env server.js" },
+  "dependencies": {
+    "express": "^4.19.0",
+    "cors": "^2.8.5",
+    "ethers": "^6.13.0"
+  }
+}

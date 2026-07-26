@@ -3,7 +3,7 @@ import { usePublicClient } from "wagmi";
 import { parseAbiItem } from "viem";
 import { PLATFORM_ADDRESS, PLATFORM_ABI } from "../config/contracts.js";
 import { fetchJSON } from "../lib/ipfs.js";
-import { chaumPedersenVerify, short } from "../lib/crypto.js";
+import { chaumPedersenVerify, short, decryptArtifact, isEncryptedArtifact } from "../lib/crypto.js";
 
 const VOTE_CAST_EVENT = parseAbiItem(
   "event VoteCast(uint256 indexed electionId, uint256 indexed nullifier, uint256[4] ciphertext)"
@@ -28,6 +28,8 @@ export default function VerifierPage() {
   const publicClient = usePublicClient();
   const [electionId, setElectionId] = useState("");
   const [report, setReport] = useState(null);
+  const [contentKeyFile, setContentKeyFile] = useState(null);
+  const [needsContentKey, setNeedsContentKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -56,7 +58,19 @@ export default function VerifierPage() {
       });
 
       // 2. Published results from IPFS
-      const results = await fetchJSON(e.resultCID);
+      let results = await fetchJSON(e.resultCID);
+      let designatedVerifier = false;
+      if (isEncryptedArtifact(results)) {
+        const contentKey = contentKeyFile?.key || null;
+        if (!contentKey) {
+          setNeedsContentKey(true);
+          throw new Error(
+            "PRIVATE election — results are encrypted. Designated auditors: upload the content key file to run the audit. On-chain facts (ballot count, publication time and authority) remain publicly verifiable."
+          );
+        }
+        results = await decryptArtifact(results, contentKey);
+        designatedVerifier = true;
+      }
       const pk = { x: results.publicKey.x, y: results.publicKey.y };
       const nCandidates = results.results.length;
 
@@ -114,6 +128,11 @@ export default function VerifierPage() {
         cpOk, cpFail, skipped, missingOnChain,
         pkMatches, uniqueOk, tallyMatches, verified,
         cid: e.resultCID,
+        designatedVerifier,
+        publishedAt:
+          Number(e.resultPublishedAt) > 0
+            ? new Date(Number(e.resultPublishedAt) * 1000).toLocaleString()
+            : null,
       });
     } catch (err) {
       setError(err.shortMessage || err.message);
@@ -141,6 +160,30 @@ export default function VerifierPage() {
             {busy ? (<><span className="spinner" /> Auditing…</>) : "Audit"}
           </button>
         </div>
+        {(needsContentKey || contentKeyFile) && (
+          <div className="mt-3">
+            <label className="label">Content key (private election — designated auditors)</label>
+            <input
+              type="file"
+              accept=".json"
+              className="text-sm"
+              onChange={(ev) => {
+                const f = ev.target.files?.[0];
+                if (!f) return;
+                const r = new FileReader();
+                r.onload = () => {
+                  try {
+                    setContentKeyFile(JSON.parse(String(r.result)));
+                  } catch {}
+                };
+                r.readAsText(f);
+              }}
+            />
+            {contentKeyFile && (
+              <p className="text-xs text-verify mt-1.5">Key loaded — press Audit again.</p>
+            )}
+          </div>
+        )}
         {error && <p className="text-seal text-sm mt-3">{error}</p>}
       </section>
 
@@ -204,6 +247,17 @@ export default function VerifierPage() {
 
           <p className="text-xs text-muted mt-4">
             Results CID: <span className="font-mono">{short(report.cid, 20)}</span>
+            {report.designatedVerifier && (
+              <>
+                {" · "}
+                <span className="text-foil">private election — designated-verifier audit</span>
+              </>
+            )}
+            {report.publishedAt && (
+              <>
+                {" · "}published on-chain {report.publishedAt}
+              </>
+            )}
           </p>
         </section>
       )}

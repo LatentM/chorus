@@ -12,6 +12,8 @@ import { fetchJSON, listElections } from "../lib/ipfs.js";
 import {
   deriveVoterCommitment,
   buildMerkleProof,
+  decryptArtifact,
+  isEncryptedArtifact,
   deriveSecretKey,
   computeNullifier,
   encryptVote,
@@ -20,6 +22,7 @@ import {
   short,
 } from "../lib/crypto.js";
 
+const RELAYER_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
 const WASM_URL = "/circuits/VotingCircuit.wasm";
 const ZKEY_URL = "/circuits/circuit_final.zkey";
 
@@ -87,6 +90,24 @@ function CastBallot() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Backend indexer first (instant, no log-range limits); chain logs as fallback.
+      if (RELAYER_URL) {
+        try {
+          const r = await fetch(`${RELAYER_URL}/elections`, { signal: AbortSignal.timeout(4000) });
+          if (r.ok) {
+            const list = await r.json();
+            if (!cancelled && list.length) {
+              setKnownElections(
+                list.map((e) => ({
+                  id: e.id,
+                  title: registry.find((x) => String(x.id) === e.id)?.title || "",
+                }))
+              );
+              return;
+            }
+          }
+        } catch { /* fall through */ }
+      }
       try {
         const logs = await publicClient.getLogs({
           address: PLATFORM_ADDRESS,
@@ -118,6 +139,9 @@ function CastBallot() {
   const [election, setElection] = useState(null); // on-chain struct
   const [metadata, setMetadata] = useState(null); // ipfs metadata
   const [tree, setTree] = useState(null);
+  const [contentKeyFile, setContentKeyFile] = useState(null); // private elections
+  const [needsContentKey, setNeedsContentKey] = useState(false);
+  const [gasless, setGasless] = useState(false); // relayer pays gas; off unless chosen
   const [eligible, setEligible] = useState(null);
   const [candidate, setCandidate] = useState(null);
   const [status, setStatus] = useState("");
@@ -153,10 +177,21 @@ function CastBallot() {
         throw new Error(
           "No metadata CID for this election (created pre-upgrade on another machine?). Ask the admin for the metadata CID."
         );
-      const meta = await fetchJSON(metaCid);
+      let meta = await fetchJSON(metaCid);
+      const contentKey = contentKeyFile?.key || null;
+      if (isEncryptedArtifact(meta)) {
+        if (!contentKey) {
+          setNeedsContentKey(true);
+          throw new Error(
+            "This is a PRIVATE election — upload the content key file the organiser distributed to eligible voters, then load again."
+          );
+        }
+        meta = await decryptArtifact(meta, contentKey);
+      }
       setMetadata(meta);
 
-      const treeJson = await fetchJSON(meta.merkleTreeCid);
+      let treeJson = await fetchJSON(meta.merkleTreeCid);
+      if (isEncryptedArtifact(treeJson)) treeJson = await decryptArtifact(treeJson, contentKey);
       setTree(treeJson);
 
     } catch (err) {
@@ -253,20 +288,43 @@ function CastBallot() {
       // verifier will check, so the emitted ballot always matches the proof.
       const cipher = [input[3], input[4], input[5], input[6]];
       log("Sending castVote transaction…");
-      const hash = await writeContractAsync({
-        address: PLATFORM_ADDRESS,
-        abi: PLATFORM_ABI,
-        functionName: "castVote",
-        args: [
-          BigInt(electionId),
-          nullifier,
-          cipher,
-          a,
-          b,
-          c,
-          input,
-        ],
-      });
+      let hash;
+      if (gasless && RELAYER_URL) {
+        // GASLESS: the relayer pays gas. Sound because castVote never uses
+        // msg.sender — identity is the nullifier, eligibility is the proof.
+        log("Submitting via relayer (gasless — no wallet transaction)…");
+        const r = await fetch(`${RELAYER_URL}/relay`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            electionId: String(electionId),
+            nullifier: nullifier.toString(),
+            ciphertext: cipher.map(String),
+            a: a.map(String),
+            b: [b[0].map(String), b[1].map(String)],
+            c: c.map(String),
+            input: input.map(String),
+          }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "Relayer rejected the ballot");
+        hash = j.txHash;
+      } else {
+        hash = await writeContractAsync({
+          address: PLATFORM_ADDRESS,
+          abi: PLATFORM_ABI,
+          functionName: "castVote",
+          args: [
+            BigInt(electionId),
+            nullifier,
+            cipher,
+            a,
+            b,
+            c,
+            input,
+          ],
+        });
+      }
       log("Waiting for confirmation…");
       await publicClient.waitForTransactionReceipt({ hash });
       setReceipt({ nullifier: nullifier.toString(), tx: hash });
@@ -294,6 +352,34 @@ function CastBallot() {
             Load
           </button>
         </div>
+        {(needsContentKey || contentKeyFile) && (
+          <div className="mt-3">
+            <label className="label">Content key (private election)</label>
+            <input
+              type="file"
+              accept=".json"
+              className="text-sm"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const r = new FileReader();
+                r.onload = () => {
+                  try {
+                    setContentKeyFile(JSON.parse(String(r.result)));
+                  } catch {
+                    setError("Content key file is not valid JSON");
+                  }
+                };
+                r.readAsText(f);
+              }}
+            />
+            {contentKeyFile && (
+              <p className="text-xs text-verify mt-1.5">
+                Key loaded — press Load again.
+              </p>
+            )}
+          </div>
+        )}
         {knownElections.length > 0 && (
           <p className="text-xs text-muted mt-2">
             On this chain:{" "}
@@ -347,7 +433,7 @@ function CastBallot() {
                   <input
                     type="radio"
                     name="candidate"
-                    className="accent-[#C8502E] w-4 h-4"
+                    className="accent-[#FFC943] w-4 h-4"
                     checked={candidate === i}
                     onChange={() => setCandidate(i)}
                   />
@@ -356,6 +442,18 @@ function CastBallot() {
                 </label>
               ))}
             </div>
+            {RELAYER_URL && (
+              <label className="flex items-center gap-2 mb-4 text-sm text-muted cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={gasless}
+                  onChange={(e) => setGasless(e.target.checked)}
+                  className="accent-[#FFC943]"
+                />
+                Gasless — the platform relayer pays the network fee (you still
+                sign once to derive your voting secret)
+              </label>
+            )}
             <button
               className="btn-seal w-full"
               disabled={
