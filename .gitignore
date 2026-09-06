@@ -14,9 +14,9 @@ merkleTree.json
 electionKeys.json
 
 # Election secrets downloaded by the app — NEVER commit these
-trustvote-election-*-key.json
-trustvote-election-*-content-key.json
-trustvote-election-*-trustee-*.json
+chorus-election-*-key.json
+chorus-election-*-content-key.json
+chorus-election-*-trustee-*.json
 commitments.csv
 verification_key.json
 

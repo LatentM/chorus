@@ -1,11 +1,28 @@
-# TrustVote
+# Chorus
 
-A zero-knowledge, blockchain-based voting platform with end-to-end
-verifiability. Targets **Polygon** — a local Hardhat chain for development,
-**Polygon Amoy** for public testing, and **Polygon mainnet** for production.
-Sub-cent transaction costs make per-ballot gas practical; the contracts are
-chain-agnostic EVM, so any EVM network can be added in
-`contracts/hardhat.config.js` and `frontend/src/main.jsx`.
+**Anyone can check the count. No one can check your ballot.**
+
+Chorus is a zero-knowledge voting system on EVM chains. Ballots are encrypted
+in the voter's browser, eligibility is proven with a Groth16 membership proof
+that never reveals *which* registered voter is voting, double-voting is
+blocked on-chain by nullifiers, and the published tally ships with proofs that
+let anyone recount from public data alone.
+
+Targets **Polygon** — a local Hardhat chain for development, **Polygon Amoy**
+for public testing, mainnet for real deployments. Contracts are chain-agnostic
+EVM.
+
+[![CI](https://github.com/OWNER/chorus/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/chorus/actions/workflows/ci.yml)
+![License: ]()
+
+> **Status — working end to end, not hardened for a binding election.**
+> A complete election has been run locally with genuine Groth16 proofs
+> verified on-chain. The trusted setup is a single-participant ceremony, there
+> is no coercion resistance, and the code has had no external audit. See
+> [Threat model & limitations](#threat-model--limitations) before trusting it
+> with anything that matters.
+
+## What the cryptography guarantees
 
 - **Ballot secrecy** — exponential ElGamal on BabyJubJub; nobody (including the
   operator) can see an individual vote.
@@ -17,7 +34,7 @@ chain-agnostic EVM, so any EVM network can be added in
   decryption and re-tally the election.
 
 ```
-trustvote/
+chorus/
 ├── contracts/   Hardhat · VotingPlatform.sol · Groth16Verifier.sol (ceremony output) · tests · deploy
 ├── circuits/    Circom 2.1.5 · VotingCircuit.circom (depth 20, 10 candidates)
 ├── scripts/     Node ESM · deriveCommitments.js · generateMerkleTree.js · generateKeys.js · tally.js · pinata.js
@@ -29,7 +46,6 @@ trustvote/
 
 ### 0. Prerequisites
 
-- Node.js ≥ 18, npm
 - Node.js ≥ 18, npm (Node 20 LTS recommended on Windows — Node 22 can emit a
   harmless libuv assertion after Hardhat commands complete)
 - MetaMask (or any RainbowKit-supported wallet). For local development, add a
@@ -99,7 +115,7 @@ Admin → Voter → Verifier lifecycle works before the circuit is compiled:
 
 1. **Registration phase.** The admin announces the upcoming *Election ID*.
    Each voter opens **Voter tab → Register**, enters the ID, signs
-   `TrustVote Election: <id>`, and sends the derived **commitment**
+   `Chorus Election: <id>`, and sends the derived **commitment**
    (`Poseidon(BabyPbk(secretKey).Ax)`) to the admin. For a one-machine demo,
    `cd scripts && node deriveCommitments.js 1` derives commitments for the
    8 standard Hardhat dev accounts into `commitments.csv`.
@@ -109,7 +125,7 @@ Admin → Voter → Verifier lifecycle works before the circuit is compiled:
    downloads automatically — keep it.
 3. **Voter tab → Cast a ballot** (connect a registered wallet): load the
    election, optionally *Check my registration*, pick a candidate, *Cast
-   anonymous vote*. You'll sign `TrustVote Election: <id>` (secret
+   anonymous vote*. You'll sign `Chorus Election: <id>` (secret
    derivation), then the app rebuilds your commitment, extracts the Merkle
    proof, computes the nullifier, ElGamal-encrypts the ballot, generates a
    (mock or real) proof in a Web Worker, and submits `castVote`. Save the
@@ -187,39 +203,6 @@ Uploaded artifacts: `merkleTree.json`, election metadata, and
 | Nullifier | Double-vote prevention, unlinkable to the address |
 | Chaum-Pedersen DLEQ | Publicly verifiable decryption |
 
-## 10-week implementation plan (spec §10)
-
-**Phase 1 — Foundation (Weeks 1–2).** Monorepo setup (`/contracts` Hardhat,
-`/frontend` Vite+React). Deploy mock Groth16Verifier and VotingPlatform with
-Hardhat unit tests for the election lifecycle. Frontend skeleton with
-RainbowKit/wagmi/Tailwind, wallet connection, Amoy network switch, static
-election list. *Deliverable:* page that connects MetaMask and calls a mock
-castVote.
-
-**Phase 2 — ZK circuit & on-chain verification (Weeks 3–4).** Write
-VotingCircuit.circom (Merkle proof, nullifier, ElGamal, 1-out-of-N check);
-test with circom_tester/snarkjs; simulated trusted setup; export the Solidity
-verifier and integrate it; Hardhat tests submitting real proofs and rejecting
-tampered inputs. *Deliverable:* circuit tested, real verifier deployed.
-
-**Phase 3 — Voting frontend integration (Weeks 5–6).** Sample 50-address
-voter list → Poseidon Merkle tree → Pinata; browser proof computation for the
-connected address; Web Worker snarkjs proving with progress UX; castVote
-wiring and error handling; Verify-my-vote page. *Deliverable:* complete voter
-journey on Amoy.
-
-**Phase 4 — Admin dashboard & decryption (Weeks 7–8).** Create-election
-wizard (CSV upload, auto tree build, IPFS upload, client-side key generation);
-Node tally script (fetch events, decrypt, Chaum-Pedersen proofs); results
-publishing and the public verifier page. *Deliverable:* full lifecycle
-create → vote → tally → verify demonstrable.
-
-**Phase 5 — Polish, testing, documentation (Weeks 9–10).** Loading states,
-error messages, responsive design; security/edge-case tests (double vote,
-ineligible voter, wrong election id/root, 10k-voter proof benchmark); project
-report, demo video, README; deploy frontend to Vercel/Netlify and verify the
-contract on Polygonscan. *Deliverable:* submission-ready project.
-
 ## Election visibility: public & private
 
 Every election is created as either:
@@ -256,18 +239,26 @@ Every election is created as either:
 A single optional Node service (`cd backend && cp .env.example .env && npm
 install && npm start`, default port 8787) provides:
 
-- **Gasless voting relayer** (`POST /relay`) — voters submit ballots without
-  paying gas; the relayer wallet pays. Sound by construction: `castVote`
+- **Gasless voting relayer** (`POST /relay`) — **the default submission path**
+  when configured; voters submit ballots without paying gas and without their
+  wallet address ever appearing on-chain. The relayer wallet pays. Sound by construction: `castVote`
   never reads `msg.sender` — identity is the nullifier and eligibility is
   the Groth16 proof, so who pays gas is irrelevant. The relayer dry-runs
   every ballot (`staticCall`) so invalid submissions cost it nothing, and
   rate-limits per IP. Enable in the frontend with
-  `VITE_BACKEND_URL=http://localhost:8787` (a "Gasless" toggle appears).
+  `VITE_BACKEND_URL=http://localhost:8787`. If the relayer is unreachable the
+  voter is asked before falling back to a wallet transaction, and the proof is
+  reused — never regenerated.
 - **Pinata proxy** (`POST /pin`, `GET /ipfs/:cid`) — the Pinata JWT lives
   server-side only; the browser bundle carries no credential. Falls back to
   mock CIDs without a JWT.
-- **Event indexer** (`GET /elections`) — cached `ElectionCreated` list for
-  instant election discovery without client-side log scans.
+- **Event indexer** (`GET /elections`) — incremental `ElectionCreated` cache
+  for instant election discovery without client-side log scans.
+- **Health** (`GET /health`) — relayer balance, indexer position, config flags.
+
+Every route is rate-limited per IP. CORS is restricted to `ALLOWED_ORIGINS`
+(default: the Vite dev server) — set it to your deployed frontend URL. Behind
+a reverse proxy, set `TRUST_PROXY=1` so limits apply per client, not per proxy.
 
 ## Key custody: single vault or trustee shares
 
@@ -292,26 +283,76 @@ combined and each trustee submits a partial decryption with its own proof.)
   likewise a new circuit and ceremony. Exponential ElGamal was chosen
   precisely to enable this upgrade path.
 
-## Security notes / known TODOs
+## Threat model & limitations
 
-- `Groth16Verifier.sol` is a **mock** (accepts all proofs) until the ceremony
-  runs — clearly unsafe for anything but development. It is inherently a
-  build artifact of `snarkjs zkey export solidityverifier`; there is no way
-  to write it by hand.
-- The circuit, contracts, and clients have **not been compiled or executed
-  end-to-end** — run `npm install && npx hardhat test` in `/contracts`, the
-  circom pipeline in `/circuits`, and a witness sanity test (especially the
-  `vote = 0` identity-point edge, see `circuits/README.md`) before trusting
-  the stack.
-- **Design deviation from spec §6.2 (documented):** the verifier interface is
-  `uint[9]`, not `uint[7]` — the two extra signals bind the ElGamal election
-  key inside the proof and are checked against on-chain storage
-  (`Pubkey mismatch`). Without this, a prover could encrypt under an
-  arbitrary key and submit a permanently undecryptable (spoiled) ballot.
-- **Registration phase (resolves the spec §4.2 vs §7 leaf mismatch):** the
-  Merkle leaf is the voter commitment `Poseidon(BabyPbk(sk).Ax)` exactly as
-  the circuit derives it. Voters register commitments before election
-  creation (Voter tab → Register / `scripts/deriveCommitments.js`); Ethereum
-  addresses never enter the tree, which also removes the address↔ballot
-  linkability the address-leaf design would have had.
-- Use a real multi-party Powers of Tau ceremony before any production use.
+What Chorus defends against, by construction:
+
+| Adversary | Outcome |
+|---|---|
+| Operator reads ballots | Impossible — only ciphertext ever exists off the voter's device |
+| Operator forges the tally | Detected — Verifier recounts from public ciphertexts and DLEQ proofs |
+| Operator publishes early | Refused on-chain — results are end-gated and timestamped |
+| Voter votes twice | Rejected on-chain — nullifier repeats |
+| Non-voter casts a ballot | Rejected — no Merkle membership proof |
+| Voter spoils via wrong key | Rejected — ElGamal key is bound inside the proof (`uint[9]` interface) |
+| Relayer censors a ballot | Voter submits the *same proof* from their own wallet |
+| Observer learns *who voted* | Hidden via relayer — every ballot arrives from one address, so wallets never appear on `castVote` transactions |
+
+What it does **not** defend against — read this before any real use:
+
+- **Trusted setup.** The Groth16 proving key came from a single-participant
+  ceremony. Whoever ran it could, in principle, forge proofs. A production
+  deployment needs a multi-party Powers of Tau ceremony so no one holds the
+  toxic waste.
+- **Coercion.** A voter can be watched while voting. Re-voting was designed
+  but deliberately not implemented (see above) because a naive version is
+  unsound without a freshness counter in the circuit.
+- **Anonymity set size.** Privacy is proportional to the number of voters. A
+  three-voter election gives weak anonymity regardless of the cryptography.
+- **Key custody at scale.** Shamir threshold shares work and are tested
+  exhaustively (`npm run test:shamir`: all 36 $(t,n)$ configurations up to
+  $n=9$, 1,972 subsets — every $t$-subset reconstructs, every $(t-1)$-subset
+  does not), but share *distribution*
+  is manual file download. Not tested with real trustees.
+- **Relayer metadata.** Relaying hides participation from the chain but the
+  relayer itself sees the submitter's IP and timing. It is a privacy trust
+  point for metadata only — it can never read a ballot or forge one.
+- **No external audit.** Nobody outside the author has reviewed this code.
+
+Deployment guards:
+
+- `Groth16Verifier.sol` ships as a **mock that accepts every proof** until you
+  replace it with the ceremony output. `deploy.js` detects the mock and
+  **refuses to deploy it to any non-local chain** unless
+  `ALLOW_MOCK_VERIFIER=1` is set explicitly.
+- The verifier interface is `uint[9]`, not the spec's `uint[7]`: the two extra
+  signals bind the election's ElGamal key inside the proof and are checked
+  against on-chain storage. Without this a prover could encrypt under an
+  arbitrary key and submit a permanently undecryptable ballot.
+- Merkle leaves are voter commitments `Poseidon(BabyPbk(sk).Ax)`, never
+  Ethereum addresses. Addresses do not enter the tree, which removes the
+  address↔ballot linkability an address-leaf design would have.
+
+## Deployment and measurement
+
+See [DEPLOYMENT.md](DEPLOYMENT.md): how to fill the evaluation numbers, swap
+the mock verifier for the ceremony output, how much POL an Amoy demo really
+costs (~0.2), and when mainnet is worth it.
+
+## Development
+
+```bash
+npm run install:all          # all four packages
+
+cd contracts && npx hardhat test          # 13 lifecycle + security tests
+cd frontend  && npm run lint && npm run test:shamir && npm run build
+```
+
+CI runs all three on every push (`.github/workflows/ci.yml`). ESLint's
+`no-undef` is on as an error — three separate bugs in this codebase were state
+variables used before declaration, each surfacing only at runtime after a
+minute of proof generation.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

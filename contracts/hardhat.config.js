@@ -23,6 +23,12 @@ module.exports = {
       chainId: 137,
     },
   },
+  gasReporter: {
+    // REPORT_GAS=true npx hardhat test  → per-function gas table for the paper
+    enabled: process.env.REPORT_GAS === "true",
+    showMethodSig: true,
+    noColors: true,
+  },
   etherscan: {
     // For `npx hardhat verify --network amoy <address>`
     // or `npx hardhat verify --network polygon <address>`

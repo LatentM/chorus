@@ -174,7 +174,9 @@ export default function VerifierPage() {
                 r.onload = () => {
                   try {
                     setContentKeyFile(JSON.parse(String(r.result)));
-                  } catch {}
+                  } catch {
+                    setContentKeyFile(null); // not JSON — ignore the file
+                  }
                 };
                 r.readAsText(f);
               }}

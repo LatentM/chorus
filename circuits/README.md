@@ -1,4 +1,4 @@
-# TrustVote — ZK Circuit
+# Chorus — ZK Circuit
 
 `VotingCircuit.circom` proves voter eligibility (fixed-depth-20 Poseidon
 Merkle proof over voter commitments `Poseidon(BabyPbk(secretKey).Ax)`),

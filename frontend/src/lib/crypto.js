@@ -1,4 +1,4 @@
-// TrustVote browser crypto — Poseidon, BabyJubJub ElGamal, Merkle proofs,
+// Chorus browser crypto — Poseidon, BabyJubJub ElGamal, Merkle proofs,
 // secret derivation, Chaum-Pedersen verification, AES-GCM key vaults.
 // All primitives per spec Section 5.
 import { buildPoseidon, buildBabyjub } from "circomlibjs";
@@ -27,12 +27,12 @@ export async function poseidonHash(inputs) {
 // ---------------------------------------------------------------------------
 
 export function voteMessage(electionId) {
-  return `TrustVote Election: ${electionId}`;
+  return `Chorus Election: ${electionId}`;
 }
 
 /**
  * Derive the circuit secretKey deterministically from a wallet signature of
- * "TrustVote Election: [electionId]": keccak256(signature) reduced mod the
+ * "Chorus Election: [electionId]": keccak256(signature) reduced mod the
  * BabyJubJub subgroup order. The Ethereum private key never leaves the wallet.
  */
 export async function deriveSecretKey(signature) {

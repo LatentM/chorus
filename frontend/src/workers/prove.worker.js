@@ -19,14 +19,17 @@ self.onmessage = async (e) => {
     };
 
     self.postMessage({ type: "progress", message: "Computing witness…" });
+    // Timed for the evaluation section: witness + proof (snarkjs fullProve).
+    const t0 = performance.now();
     const { proof, publicSignals } = await groth16.fullProve(
       input,
       wasm,
       zkey,
       logger
     );
-    self.postMessage({ type: "progress", message: "Proof generated ✓" });
-    self.postMessage({ type: "result", proof, publicSignals });
+    const proveMs = Math.round(performance.now() - t0);
+    self.postMessage({ type: "progress", message: `Proof generated ✓ (${(proveMs / 1000).toFixed(2)} s)` });
+    self.postMessage({ type: "result", proof, publicSignals, proveMs });
   } catch (err) {
     self.postMessage({ type: "error", message: err.message || String(err) });
   }

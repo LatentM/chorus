@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useAccount,
   useReadContract,
@@ -156,7 +156,7 @@ function DelegateCard() {
     <div className="card">
       <h2 className="font-display text-xl font-bold mb-1">Delegate election</h2>
       <p className="text-sm text-muted mb-4">
-        Hand one election's result-publishing rights to a client (e.g. a
+        Hand one election&apos;s result-publishing rights to a client (e.g. a
         ministry) — for that election only. You keep the platform and every
         other election; revoke any time.
       </p>
@@ -280,8 +280,8 @@ function CreateElectionWizard() {
       if (isPrivate) {
         contentKey = generateContentKey();
         downloadJSON(
-          { trustvote: "content-key", electionId: Number(electionId), key: contentKey },
-          `trustvote-election-${electionId}-content-key.json`
+          { chorus: "content-key", electionId: Number(electionId), key: contentKey },
+          `chorus-election-${electionId}-content-key.json`
         );
         push("PRIVATE election — content key downloaded. Distribute it to eligible voters and designated auditors; without it, artifacts are unreadable.");
       }
@@ -301,7 +301,7 @@ function CreateElectionWizard() {
         const vault = await encryptWithPassword(keys.sk, password);
         downloadJSON(
           { electionId, pkX: keys.pkX, pkY: keys.pkY, encryptedSk: vault },
-          `trustvote-election-${electionId}-key.json`
+          `chorus-election-${electionId}-key.json`
         );
         push("Encrypted private key downloaded — store it OFFLINE.");
       } else {
@@ -312,7 +312,7 @@ function CreateElectionWizard() {
         for (const s of shares) {
           downloadJSON(
             {
-              trustvote: "key-share",
+              chorus: "key-share",
               electionId: Number(electionId),
               pkX: keys.pkX,
               pkY: keys.pkY,
@@ -321,7 +321,7 @@ function CreateElectionWizard() {
               index: s.index,
               share: s.share,
             },
-            `trustvote-election-${electionId}-trustee-${s.index}-of-${nTrustees}.json`
+            `chorus-election-${electionId}-trustee-${s.index}-of-${nTrustees}.json`
           );
         }
         push(
@@ -596,7 +596,7 @@ function TallyCard() {
       reader.onload = () => {
         try {
           const parsed = JSON.parse(String(reader.result));
-          if (parsed.trustvote === "key-share") {
+          if (parsed.chorus === "key-share") {
             setShareFiles((prev) => {
               const others = prev.filter((s) => s.index !== parsed.index);
               return [...others, parsed].sort((a, b) => a.index - b.index);
@@ -619,6 +619,9 @@ function TallyCard() {
     try {
       let sk, pkMeta;
       if (shareFiles.length > 0) {
+        const eid = String(shareFiles[0].electionId);
+        if (shareFiles.some((s) => String(s.electionId) !== eid))
+          throw new Error("Trustee shares are from different elections — check the files");
         const need = shareFiles[0].threshold;
         if (shareFiles.length < need)
           throw new Error(

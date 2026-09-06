@@ -19,7 +19,7 @@ interface IGroth16Verifier {
 }
 
 /**
- * @title TrustVote VotingPlatform
+ * @title Chorus VotingPlatform
  * @notice A single admin-owned contract managing multiple anonymous,
  *         ZK-verified elections (spec Section 6.2).
  *

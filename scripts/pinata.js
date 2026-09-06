@@ -24,7 +24,7 @@ function mockCid(json) {
  * Upload a JSON object to IPFS via Pinata. Returns the CID string.
  * With no PINATA_JWT set, returns a mock CID (offline mode).
  */
-export async function uploadJSON(json, name = "trustvote.json") {
+export async function uploadJSON(json, name = "chorus.json") {
   if (!PINATA_JWT) {
     const cid = mockCid(json);
     console.log(`[pinata] no PINATA_JWT — using MOCK CID ${cid}`);

@@ -12,14 +12,14 @@ const GATEWAYS = [
 ];
 
 const MOCK_PREFIX = "QmMOCK";
-const mockKey = (cid) => `trustvote-ipfs-${cid}`;
+const mockKey = (cid) => `chorus-ipfs-${cid}`;
 
 export function isMockCid(cid) {
   return cid.startsWith(MOCK_PREFIX);
 }
 
 /** Upload JSON; returns a CID (real via Pinata, or deterministic mock). */
-export async function uploadJSON(json, name = "trustvote.json") {
+export async function uploadJSON(json, name = "chorus.json") {
   if (BACKEND_URL) {
     const r = await fetch(`${BACKEND_URL}/pin`, {
       method: "POST",
@@ -82,7 +82,7 @@ export async function fetchJSON(cid) {
 // -- Local election index -----------------------------------------------
 // The contract stores no list of election ids, so the Admin wizard keeps a
 // small local registry { id, title, metadataCid } for the pickers.
-const REGISTRY_KEY = "trustvote-elections";
+const REGISTRY_KEY = "chorus-elections";
 
 export function registerElection(entry) {
   const list = listElections().filter((e) => e.id !== entry.id);

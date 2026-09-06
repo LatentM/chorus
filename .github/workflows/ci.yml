@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contracts:
+    name: Contracts · compile + test
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: contracts } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: contracts/package-lock.json }
+      - run: npm ci
+      - run: npx hardhat test
+
+  frontend:
+    name: Frontend · lint + build
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: frontend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:shamir
+      - run: npm run build
+        env:
+          # Build must succeed with no secrets present; the app falls back
+          # to the zero address and a console warning.
+          VITE_PLATFORM_ADDRESS: ""
+
+  backend:
+    name: Backend · syntax + boot
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install
+      - run: node --check server.js
+      # Boot without config, hit /health, confirm it answers and exits cleanly.
+      - run: |
+          node server.js & PID=$!
+          sleep 2
+          curl -fsS http://127.0.0.1:8787/health | tee health.json
+          grep -q '"ok":true' health.json
+          kill $PID

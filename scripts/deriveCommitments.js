@@ -4,7 +4,7 @@
 // (one 0x-key per line — defaults to the 8 well-known Hardhat dev keys),
 // this script performs exactly what a voter's wallet does in the frontend:
 //
-//   1. sign the message  "TrustVote Election: [electionId]"   (personal_sign)
+//   1. sign the message  "Chorus Election: [electionId]"   (personal_sign)
 //   2. secretKey  = keccak256(signature) mod BabyJubJub subgroup order
 //   3. pubKey     = Base8 * secretKey        (BabyPbk)
 //   4. commitment = Poseidon(pubKey.x)       (the Merkle leaf)
@@ -50,7 +50,7 @@ async function main() {
   const babyJub = await buildBabyjub();
   const F = poseidon.F;
 
-  const message = `TrustVote Election: ${electionId}`;
+  const message = `Chorus Election: ${electionId}`;
   console.log(`Registration message: "${message}"`);
 
   const rows = [];

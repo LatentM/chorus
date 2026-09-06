@@ -141,10 +141,26 @@ function CastBallot() {
   const [tree, setTree] = useState(null);
   const [contentKeyFile, setContentKeyFile] = useState(null); // private elections
   const [needsContentKey, setNeedsContentKey] = useState(false);
-  const [gasless, setGasless] = useState(false); // relayer pays gas; off unless chosen
+  // Gasless is the DEFAULT when a relayer is configured and healthy. It is
+  // never a gate: if the relayer is unreachable the voter can submit the
+  // same proof from their own wallet. Relaying also hides *participation* —
+  // every ballot arrives from one address, so chain observers cannot learn
+  // which wallets voted.
+  const [relayerHealthy, setRelayerHealthy] = useState(null); // null = unknown
+  const [forceWallet, setForceWallet] = useState(false);       // advanced override
+  const [pendingBallot, setPendingBallot] = useState(null);    // proof held for fallback
+  useEffect(() => {
+    if (!RELAYER_URL) return;
+    let alive = true;
+    fetch(`${RELAYER_URL}/health`, { signal: AbortSignal.timeout(4000) })
+      .then((r) => r.json())
+      .then((j) => alive && setRelayerHealthy(!!(j.ok && j.relayer)))
+      .catch(() => alive && setRelayerHealthy(false));
+    return () => { alive = false; };
+  }, []);
+  const useRelayer = !!RELAYER_URL && relayerHealthy === true && !forceWallet;
   const [eligible, setEligible] = useState(null);
   const [candidate, setCandidate] = useState(null);
-  const [status, setStatus] = useState("");
   const [progress, setProgress] = useState([]);
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState(null);
@@ -287,15 +303,38 @@ function CastBallot() {
       // Ciphertext for the VoteCast event, taken from the same signals the
       // verifier will check, so the emitted ballot always matches the proof.
       const cipher = [input[3], input[4], input[5], input[6]];
-      log("Sending castVote transaction…");
-      let hash;
-      if (gasless && RELAYER_URL) {
-        // GASLESS: the relayer pays gas. Sound because castVote never uses
-        // msg.sender — identity is the nullifier, eligibility is the proof.
-        log("Submitting via relayer (gasless — no wallet transaction)…");
-        const r = await fetch(`${RELAYER_URL}/relay`, {
+      const ballot = { electionId, nullifier, cipher, a, b, c, input };
+      await submitBallot(ballot, { viaWallet: !useRelayer, log });
+    } catch (err) {
+      setError(err.shortMessage || err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Submit an already-generated proof. Separated from proof generation so a
+   * failed submission never throws the proof away — regenerating costs the
+   * voter a minute, and a Groth16 proof is not bound to who submits it.
+   *
+   * Relayer failures are split in two:
+   *   - transport / availability (network error, 5xx, 429, 503): keep the
+   *     ballot and ASK before falling back to a wallet transaction, because
+   *     that costs the voter money and they chose gasless.
+   *   - rejection (400 with a revert reason like "Nullifier used"): a real
+   *     verdict from the dry-run. Surface it. Do not fall back.
+   */
+  async function submitBallot(ballot, { viaWallet, log }) {
+    const { electionId, nullifier, cipher, a, b, c, input } = ballot;
+    let hash;
+    if (!viaWallet) {
+      log("Submitting via relayer — no gas needed, no wallet transaction…");
+      let r;
+      try {
+        r = await fetch(`${RELAYER_URL}/relay`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(30_000),
           body: JSON.stringify({
             electionId: String(electionId),
             nullifier: nullifier.toString(),
@@ -306,29 +345,41 @@ function CastBallot() {
             input: input.map(String),
           }),
         });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || "Relayer rejected the ballot");
-        hash = j.txHash;
-      } else {
-        hash = await writeContractAsync({
-          address: PLATFORM_ADDRESS,
-          abi: PLATFORM_ABI,
-          functionName: "castVote",
-          args: [
-            BigInt(electionId),
-            nullifier,
-            cipher,
-            a,
-            b,
-            c,
-            input,
-          ],
-        });
+      } catch {
+        r = null; // network error / timeout
       }
-      log("Waiting for confirmation…");
-      await publicClient.waitForTransactionReceipt({ hash });
-      setReceipt({ nullifier: nullifier.toString(), tx: hash });
-      log("Vote recorded on-chain ✓");
+      if (!r || r.status >= 500 || r.status === 429) {
+        setPendingBallot(ballot);
+        log("Relayer unavailable. Your proof is kept — you can submit it from your wallet below.");
+        return;
+      }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "Relayer rejected the ballot");
+      hash = j.txHash;
+    } else {
+      log("Sending castVote transaction from your wallet…");
+      hash = await writeContractAsync({
+        address: PLATFORM_ADDRESS,
+        abi: PLATFORM_ABI,
+        functionName: "castVote",
+        args: [BigInt(electionId), nullifier, cipher, a, b, c, input],
+      });
+    }
+    log("Waiting for confirmation…");
+    const rcpt = await publicClient.waitForTransactionReceipt({ hash });
+    setPendingBallot(null);
+    setReceipt({ nullifier: nullifier.toString(), tx: hash, gasUsed: rcpt.gasUsed?.toString() });
+    // gasUsed is the number Table 2 of the paper wants for castVote.
+    log(`Vote recorded on-chain ✓ · gas used ${rcpt.gasUsed?.toString() ?? "?"}`);
+  }
+
+  async function submitPendingFromWallet() {
+    if (!pendingBallot) return;
+    setBusy(true);
+    setError("");
+    const log = (m) => setProgress((p) => [...p, m]);
+    try {
+      await submitBallot(pendingBallot, { viaWallet: true, log });
     } catch (err) {
       setError(err.shortMessage || err.message);
     } finally {
@@ -443,16 +494,46 @@ function CastBallot() {
               ))}
             </div>
             {RELAYER_URL && (
-              <label className="flex items-center gap-2 mb-4 text-sm text-muted cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={gasless}
-                  onChange={(e) => setGasless(e.target.checked)}
-                  className="accent-[#FFC943]"
-                />
-                Gasless — the platform relayer pays the network fee (you still
-                sign once to derive your voting secret)
-              </label>
+              <div className="mb-4 text-sm">
+                <div className="flex items-center gap-2 text-muted">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{
+                      background:
+                        useRelayer ? "#4FE0B0" : relayerHealthy === null ? "#7E9BB2" : "#FF6B5A",
+                    }}
+                  />
+                  {relayerHealthy === null
+                    ? "Checking relayer…"
+                    : useRelayer
+                    ? "Gasless: the relayer pays the fee and hides which wallet voted."
+                    : forceWallet
+                    ? "Submitting from your own wallet (pays gas)."
+                    : "Relayer unavailable — your wallet will pay gas."}
+                </div>
+                {relayerHealthy && (
+                  <label className="flex items-center gap-2 mt-2 text-xs text-muted cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={forceWallet}
+                      onChange={(e) => setForceWallet(e.target.checked)}
+                      className="accent-[#FFC943]"
+                    />
+                    Advanced: submit from my own wallet instead
+                  </label>
+                )}
+              </div>
+            )}
+            {pendingBallot && !receipt && (
+              <div className="stamped text-seal mb-4">
+                <p className="text-sm text-ballot mb-3">
+                  The relayer didn&apos;t respond. Your proof is ready and can be
+                  submitted from your wallet — this costs a normal transaction fee.
+                </p>
+                <button className="btn-ghost" disabled={busy} onClick={submitPendingFromWallet}>
+                  Submit from my wallet
+                </button>
+              </div>
             )}
             <button
               className="btn-seal w-full"

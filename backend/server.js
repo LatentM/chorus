@@ -1,4 +1,4 @@
-// TrustVote backend — three production services in one small Node process:
+// Chorus backend — four small services in one Node process:
 //
 //   POST /pin        Pinata proxy: pins JSON to IPFS with the JWT held
 //                    SERVER-side, so the credential never ships in the
@@ -15,6 +15,7 @@
 import express from "express";
 import cors from "cors";
 import { ethers } from "ethers";
+import { createHash } from "node:crypto";
 
 const {
   PORT = 8787,
@@ -23,6 +24,12 @@ const {
   RELAYER_PRIVATE_KEY,
   PINATA_JWT,
   DEPLOY_BLOCK = "0",
+  // Comma-separated list of origins allowed to call this service.
+  // Defaults to the Vite dev server. Set to your deployed frontend in prod.
+  ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173",
+  // Behind a reverse proxy (nginx, Render, Fly), set to "1" so req.ip is
+  // the client and not the proxy — otherwise everyone shares one rate limit.
+  TRUST_PROXY = "0",
 } = process.env;
 
 const ABI = [
@@ -31,7 +38,11 @@ const ABI = [
 ];
 
 const app = express();
-app.use(cors());
+if (TRUST_PROXY === "1") app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+const origins = ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
+app.use(cors({ origin: origins, methods: ["GET", "POST"] }));
 app.use(express.json({ limit: "2mb" }));
 
 const provider = new ethers.JsonRpcProvider(RPC_URL);
@@ -42,26 +53,45 @@ const readContract = PLATFORM_ADDRESS
   ? new ethers.Contract(PLATFORM_ADDRESS, ABI, provider)
   : null;
 
+if (!PLATFORM_ADDRESS)
+  console.warn("[backend] PLATFORM_ADDRESS not set — /relay and /elections disabled");
+
 /* ------------------------------ rate limiting --------------------------- */
-const hits = new Map(); // ip -> [timestamps]
-function limited(ip, max = 30, windowMs = 60_000) {
+// Sliding window per IP, per route. Evicted every window so memory is bounded.
+const buckets = new Map(); // `${route}:${ip}` -> number[]
+function limited(route, ip, max, windowMs = 60_000) {
+  const key = `${route}:${ip}`;
   const now = Date.now();
-  const arr = (hits.get(ip) || []).filter((t) => now - t < windowMs);
+  const arr = (buckets.get(key) || []).filter((t) => now - t < windowMs);
   arr.push(now);
-  hits.set(ip, arr);
+  buckets.set(key, arr);
   return arr.length > max;
 }
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, arr] of buckets) {
+    const live = arr.filter((t) => now - t < 60_000);
+    if (live.length) buckets.set(k, live);
+    else buckets.delete(k);
+  }
+}, 60_000).unref();
+
+const rateLimit = (route, max) => (req, res, next) =>
+  limited(route, req.ip || "?", max)
+    ? res.status(429).json({ error: "Rate limited" })
+    : next();
 
 /* ------------------------------ IPFS: pin ------------------------------- */
 const mockStore = new Map(); // mock CID -> content (dev fallback)
 
-app.post("/pin", async (req, res) => {
+app.post("/pin", rateLimit("pin", 20), async (req, res) => {
   try {
-    const { content, name = "trustvote.json" } = req.body || {};
+    const { content, name = "chorus.json" } = req.body || {};
     if (content === undefined) return res.status(400).json({ error: "content required" });
+    if (typeof name !== "string" || name.length > 120)
+      return res.status(400).json({ error: "invalid name" });
 
     if (!PINATA_JWT) {
-      const { createHash } = await import("crypto");
       const cid =
         "QmMOCK" +
         createHash("sha256").update(JSON.stringify(content)).digest("hex").slice(0, 40);
@@ -75,12 +105,17 @@ app.post("/pin", async (req, res) => {
         Authorization: `Bearer ${PINATA_JWT}`,
       },
       body: JSON.stringify({ pinataMetadata: { name }, pinataContent: content }),
+      signal: AbortSignal.timeout(20_000),
     });
-    if (!r.ok) throw new Error(`Pinata ${r.status}: ${await r.text()}`);
+    if (!r.ok) {
+      console.error("pinata:", r.status, await r.text());
+      return res.status(502).json({ error: `Pinata rejected the pin (${r.status})` });
+    }
     const j = await r.json();
     res.json({ cid: j.IpfsHash });
   } catch (e) {
-    res.status(502).json({ error: e.message });
+    console.error("pin:", e.message);
+    res.status(502).json({ error: "Pinning failed" });
   }
 });
 
@@ -90,9 +125,12 @@ const GATEWAYS = [
   "https://ipfs.io/ipfs/",
   "https://cloudflare-ipfs.com/ipfs/",
 ];
+// CIDv0 (Qm + 44 base58) or CIDv1 (b + base32). Mock CIDs are Qm + hex.
+const CID_RE = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|QmMOCK[0-9a-f]{40}|b[a-z2-7]{50,})$/;
 
-app.get("/ipfs/:cid", async (req, res) => {
+app.get("/ipfs/:cid", rateLimit("ipfs", 60), async (req, res) => {
   const { cid } = req.params;
+  if (!CID_RE.test(cid)) return res.status(400).json({ error: "Invalid CID" });
   if (mockStore.has(cid)) return res.json(mockStore.get(cid));
   for (const g of GATEWAYS) {
     try {
@@ -106,86 +144,104 @@ app.get("/ipfs/:cid", async (req, res) => {
 });
 
 /* --------------------------- gasless relayer ---------------------------- */
-app.post("/relay", async (req, res) => {
+const isUintString = (v) => typeof v === "string" && /^\d{1,78}$/.test(v);
+const isUintArray = (v, n) => Array.isArray(v) && v.length === n && v.every(isUintString);
+
+app.post("/relay", rateLimit("relay", 30), async (req, res) => {
   try {
     if (!relayerWallet || !PLATFORM_ADDRESS)
       return res.status(503).json({ error: "Relayer not configured" });
-    const ip = req.ip || "?";
-    if (limited(ip)) return res.status(429).json({ error: "Rate limited" });
 
     const { electionId, nullifier, ciphertext, a, b, c, input } = req.body || {};
     // Shape validation only — the CONTRACT is the security boundary: it
     // checks the window, nullifier, stored parameters, and the Groth16 proof.
+    // Values must arrive as decimal strings; uint256 does not fit in a JS number.
     if (
-      !electionId || !nullifier ||
-      !Array.isArray(ciphertext) || ciphertext.length !== 4 ||
-      !Array.isArray(a) || a.length !== 2 ||
-      !Array.isArray(b) || b.length !== 2 ||
-      !Array.isArray(c) || c.length !== 2 ||
-      !Array.isArray(input) || input.length !== 9
+      !isUintString(String(electionId ?? "")) ||   // election 0 is valid
+      !isUintString(String(nullifier ?? "")) ||
+      !isUintArray(ciphertext, 4) ||
+      !isUintArray(a, 2) ||
+      !Array.isArray(b) || b.length !== 2 || !b.every((row) => isUintArray(row, 2)) ||
+      !isUintArray(c, 2) ||
+      !isUintArray(input, 9)
     )
       return res.status(400).json({ error: "Malformed ballot payload" });
 
+    const args = [
+      BigInt(electionId), BigInt(nullifier),
+      ciphertext.map(BigInt),
+      a.map(BigInt),
+      [b[0].map(BigInt), b[1].map(BigInt)],
+      c.map(BigInt),
+      input.map(BigInt),
+    ];
     const contract = new ethers.Contract(PLATFORM_ADDRESS, ABI, relayerWallet);
     // Dry-run first so invalid ballots cost the relayer nothing.
-    await contract.castVote.staticCall(
-      BigInt(electionId), BigInt(nullifier),
-      ciphertext.map(BigInt),
-      a.map(BigInt),
-      [b[0].map(BigInt), b[1].map(BigInt)],
-      c.map(BigInt),
-      input.map(BigInt)
-    );
-    const tx = await contract.castVote(
-      BigInt(electionId), BigInt(nullifier),
-      ciphertext.map(BigInt),
-      a.map(BigInt),
-      [b[0].map(BigInt), b[1].map(BigInt)],
-      c.map(BigInt),
-      input.map(BigInt)
-    );
+    await contract.castVote.staticCall(...args);
+    const tx = await contract.castVote(...args);
     res.json({ txHash: tx.hash });
   } catch (e) {
-    res.status(400).json({ error: e.shortMessage || e.reason || e.message });
+    // Revert reasons are safe and useful to surface ("Nullifier used", etc.)
+    res.status(400).json({ error: e.reason || e.shortMessage || "Relay failed" });
   }
 });
 
 /* ----------------------------- event indexer ---------------------------- */
+// Incremental: only scans blocks newer than the last one seen.
 let electionsCache = [];
+let lastBlock = Math.max(0, Number(DEPLOY_BLOCK) - 1);
+
 async function reindex() {
   if (!readContract) return;
   try {
+    const head = await provider.getBlockNumber();
+    if (head <= lastBlock) return;
     const logs = await readContract.queryFilter(
-      readContract.filters.ElectionCreated(),
-      Number(DEPLOY_BLOCK)
+      readContract.filters.ElectionCreated(), lastBlock + 1, head
     );
-    electionsCache = logs.map((l) => ({
-      id: l.args.electionId.toString(),
-      metadataCid: l.args.metadataCid,
-      startTime: l.args.startTime.toString(),
-      endTime: l.args.endTime.toString(),
-      block: l.blockNumber,
-    }));
+    for (const l of logs) {
+      const id = l.args.electionId.toString();
+      if (electionsCache.some((e) => e.id === id)) continue;
+      electionsCache.push({
+        id,
+        metadataCid: l.args.metadataCid,
+        startTime: l.args.startTime.toString(),
+        endTime: l.args.endTime.toString(),
+        block: l.blockNumber,
+      });
+    }
+    lastBlock = head;
   } catch (e) {
+    // A chain reset (local Hardhat restart) makes `head` go backwards.
+    // Start over so stale elections from the old chain don't linger.
+    if (/block|invalid/i.test(e.message)) { lastBlock = -1; electionsCache = []; }
     console.error("indexer:", e.message);
   }
 }
-setInterval(reindex, 15_000);
+setInterval(reindex, 15_000).unref();
 reindex();
 
 app.get("/elections", (_req, res) => res.json(electionsCache));
 
-app.get("/health", (_req, res) =>
+app.get("/health", async (_req, res) => {
+  let relayerBalance = null;
+  try {
+    if (relayerWallet) relayerBalance = ethers.formatEther(await provider.getBalance(relayerWallet.address));
+  } catch { /* chain unreachable — reported as null */ }
   res.json({
     ok: true,
     relayer: !!relayerWallet,
+    relayerBalance,
     pinata: !!PINATA_JWT,
     indexed: electionsCache.length,
-  })
-);
+    lastBlock,
+  });
+});
 
-app.listen(PORT, () =>
+const server = app.listen(PORT, () =>
   console.log(
-    `TrustVote backend on :${PORT} · relayer=${!!relayerWallet} · pinata=${!!PINATA_JWT}`
+    `Chorus backend on :${PORT} · relayer=${!!relayerWallet} · pinata=${!!PINATA_JWT} · origins=${origins.join(",")}`
   )
 );
+for (const sig of ["SIGINT", "SIGTERM"])
+  process.on(sig, () => server.close(() => process.exit(0)));

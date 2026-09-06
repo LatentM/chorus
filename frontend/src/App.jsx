@@ -14,11 +14,8 @@ const TABS = [
 
 const NETWORKS = { 31337: "Hardhat · local", 80002: "Polygon Amoy", 137: "Polygon" };
 
-/**
- * The mark: a three-node authentication path. The left branch is lit, the right
- * stays dark — one leaf proven, its sibling never revealed. Same argument as the
- * hero figure, compressed to 26px.
- */
+/** The mark: a three-node authentication path. One branch lit, one dark —
+ *  one leaf proven, its sibling never revealed. */
 function Mark() {
   return (
     <svg width="26" height="26" viewBox="0 0 64 64" className="shrink-0" aria-hidden="true">
@@ -47,29 +44,20 @@ export default function App() {
       <header className="sticky top-0 z-40 border-b border-edge bg-ink/92 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex items-center justify-between gap-4 h-16">
-            <button
-              className="flex items-center gap-3 text-left group"
-              onClick={() => setTab("home")}
-              aria-label="TrustVote home"
-            >
+            <button className="flex items-center gap-3 text-left group" onClick={() => setTab("home")} aria-label="Chorus home">
               <Mark />
               <span className="font-display font-bold text-[15px] uppercase tracking-[0.06em] group-hover:text-foil transition-colors">
-                TrustVote
+                Chorus
               </span>
             </button>
-
             <div className="flex items-center gap-4">
               <span className="hidden sm:inline-flex items-center gap-2 border border-edge rounded-[2px] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
-                <span
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ background: isConnected ? "#FFC943" : "#17405F" }}
-                />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: isConnected ? "#FFC943" : "#17405F" }} />
                 {network}
               </span>
               <ConnectButton showBalance={false} chainStatus="none" />
             </div>
           </div>
-
           <nav className="flex -mb-px" aria-label="Sections">
             {TABS.map((t) => (
               <button
@@ -77,9 +65,7 @@ export default function App() {
                 onClick={() => setTab(t.id)}
                 aria-current={tab === t.id ? "page" : undefined}
                 className={`px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.14em] border-b-2 transition-colors ${
-                  tab === t.id
-                    ? "border-foil text-foil"
-                    : "border-transparent text-muted hover:text-ballot"
+                  tab === t.id ? "border-foil text-foil" : "border-transparent text-muted hover:text-ballot"
                 }`}
               >
                 {t.label}
@@ -107,12 +93,11 @@ export default function App() {
         </div>
       </main>
 
-      {/* Title block, borrowed from the corner of an engineering drawing.
-          It states what this build actually is — useful in a review room. */}
+      {/* Title block, borrowed from the corner of an engineering drawing. */}
       <footer className="border-t border-edge bg-panel/50">
         <div className="max-w-6xl mx-auto px-6 py-5 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
           {[
-            ["Project", "TrustVote"],
+            ["Project", "Chorus"],
             ["Proof system", "Groth16 · Circom"],
             ["Ballot encryption", "ElGamal · BabyJubJub"],
             ["Network", network],

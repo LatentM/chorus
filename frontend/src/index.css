@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ————————————————————————————————————————————————————————————————
-   TrustVote · "Cyanotype"
+   Chorus · "Cyanotype"
 
    A blueprint is a plan published so that anyone can inspect it. That is
    also this system's entire claim, so it is the ground: deep drafting blue,
@@ -21,8 +21,6 @@
     @apply bg-ink text-ballot font-sans antialiased;
     font-size: 15px;
     line-height: 1.6;
-
-    /* The drafting grid. 8px fine, 64px major — sits under everything, quietly. */
     background-image:
       linear-gradient(rgba(23, 64, 95, 0.5) 1px, transparent 1px),
       linear-gradient(90deg, rgba(23, 64, 95, 0.5) 1px, transparent 1px),
@@ -37,14 +35,11 @@
   .font-display {
     font-variation-settings: "wdth" 118;
     letter-spacing: -0.015em;
-    line-height: 1.08;
+    line-height: 1.12;
     text-wrap: balance;
   }
 
-  ::selection {
-    background: #ffc943;
-    color: #05121f;
-  }
+  ::selection { background: #ffc943; color: #05121f; }
 
   :focus-visible {
     outline: 2px solid #ffc943;
@@ -54,11 +49,7 @@
 
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: #05121f; }
-  ::-webkit-scrollbar-thumb {
-    background: #17405f;
-    border-radius: 5px;
-    border: 2px solid #05121f;
-  }
+  ::-webkit-scrollbar-thumb { background: #17405f; border-radius: 5px; border: 2px solid #05121f; }
   ::-webkit-scrollbar-thumb:hover { background: #7e9bb2; }
 
   @media (prefers-reduced-motion: reduce) {
@@ -71,28 +62,22 @@
 }
 
 @layer components {
-  /* ——— A card is a sheet on the drafting table. The amber corner tick makes
-         it read as a drawn object rather than a rounded rectangle. ——— */
+  /* A card is a sheet on the drafting table. The amber corner tick makes it
+     read as a drawn object rather than a rounded rectangle. */
   .card {
     @apply relative bg-panel border border-edge p-6;
     border-radius: 3px;
   }
   .card::after {
     content: "";
-    position: absolute;
-    top: -1px;
-    left: -1px;
-    width: 10px;
-    height: 10px;
-    border-top: 1px solid #ffc943;
-    border-left: 1px solid #ffc943;
-    opacity: 0.65;
-    pointer-events: none;
+    position: absolute; top: -1px; left: -1px;
+    width: 10px; height: 10px;
+    border-top: 1px solid #ffc943; border-left: 1px solid #ffc943;
+    opacity: 0.65; pointer-events: none;
   }
 
-  /* ——— Buttons. Mono, uppercase, wide-tracked: they read as controls on an
-         instrument, not as marketing. Primary spends contrast, not colour —
-         amber stays reserved for meaning. ——— */
+  /* Buttons: mono, uppercase, wide-tracked — controls on an instrument, not
+     marketing. Primary spends contrast, not colour; amber stays for meaning. */
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-[3px]
       font-mono text-xs uppercase tracking-[0.1em] font-medium
@@ -101,9 +86,8 @@
   }
   .btn:active:not(:disabled) { transform: translateY(1px); }
 
-  /* Primary action. NOTE: deliberately NOT `bg-seal` — `seal` is the failure
-     colour in this system. Changing this to a colour fill will break the
-     app's error semantics. */
+  /* Primary action. Deliberately NOT `bg-seal` — `seal` is the FAILURE colour.
+     Filling this with a colour would break the app's error semantics. */
   .btn-seal {
     @apply btn bg-ballot text-ink font-semibold;
     border: 1px solid #e6eef4;
@@ -116,50 +100,38 @@
   }
   .btn-verify:hover:not(:disabled) { filter: brightness(1.08); }
 
-  .btn-ghost {
-    @apply btn border border-edge text-ballot bg-transparent;
-  }
-  .btn-ghost:hover:not(:disabled) {
-    border-color: #7e9bb2;
-    background: rgba(23, 64, 95, 0.35);
-  }
+  .btn-ghost { @apply btn border border-edge text-ballot bg-transparent; }
+  .btn-ghost:hover:not(:disabled) { border-color: #7e9bb2; background: rgba(23, 64, 95, 0.35); }
 
-  /* ——— Sub-tabs: a rule under the active item, nothing more. ——— */
   .subtab {
     @apply px-4 py-2 font-mono text-xs uppercase tracking-[0.12em]
       border-b-2 transition-colors duration-150 bg-transparent;
   }
-  .subtab-on   { @apply subtab border-foil text-foil; }
-  .subtab-off  { @apply subtab border-transparent text-muted; }
+  .subtab-on  { @apply subtab border-foil text-foil; }
+  .subtab-off { @apply subtab border-transparent text-muted; }
   .subtab-off:hover { @apply text-ballot; }
 
-  /* ——— Inputs sit recessed into the table. ——— */
   .input {
     @apply w-full bg-ink border border-edge rounded-[3px] px-3 py-2
       text-ballot placeholder-muted font-mono text-sm transition-colors;
   }
-  .input:focus {
-    outline: none;
-    border-color: #ffc943;
-  }
+  .input:focus { outline: none; border-color: #ffc943; }
 
-  .label {
-    @apply block font-mono text-[11px] uppercase tracking-[0.16em] text-muted mb-1.5;
-  }
+  .label { @apply block font-mono text-[11px] uppercase tracking-[0.16em] text-muted mb-1.5; }
 
   .mono-chip {
     @apply font-mono text-xs bg-ink border border-edge rounded-[3px]
       px-2.5 py-1.5 break-all leading-relaxed;
   }
 
-  /* ——— A result panel. Was a rotated wax stamp; now it sits square, with a
-         weighted left rule — the margin mark an auditor makes. ——— */
+  /* A result panel: square, with a weighted left rule — the margin mark an
+     auditor makes. Colour comes from the page via currentColor. */
   .stamped {
     @apply relative border border-edge rounded-[3px] p-5 bg-ink;
     border-left: 3px solid currentColor;
   }
 
-  /* ——— The verdict. The one place type gets loud. ——— */
+  /* The verdict. The one place type gets loud. */
   .verdict {
     @apply inline-block font-display font-black uppercase
       tracking-[0.2em] text-base px-5 py-2 rounded-[2px] animate-stamp-in;
@@ -168,11 +140,10 @@
     box-shadow: inset 0 0 0 3px rgba(5, 18, 31, 0.9), inset 0 0 0 4px currentColor;
   }
 
-  /* ——— Progress ledger ——— */
   .log-line { @apply animate-fade-up font-mono text-xs; }
 
-  /* ——— Ledger key/value with a dotted leader. The leader is doing real work:
-         it ties a short label to a 66-character hash across a wide panel. ——— */
+  /* Ledger key/value with a dotted leader — it ties a short label to a
+     66-character hash across a wide panel. */
   .kv { @apply flex items-baseline gap-2 text-sm; }
   .kv-k { @apply text-muted shrink-0 font-mono text-[11px] uppercase tracking-[0.1em]; }
   .kv-leader {
@@ -195,20 +166,16 @@
     font-variation-settings: "wdth" 118;
   }
 
-  /* ——— Audit table ——— */
   .audit-table { @apply w-full text-sm border-collapse font-mono; }
   .audit-table thead th {
     @apply text-left text-[10px] uppercase tracking-[0.16em] text-muted
       font-medium pb-2 border-b border-edge;
   }
   .audit-table thead th.num, .audit-table td.num { @apply text-right; }
-  .audit-table tbody td {
-    @apply py-2.5 border-b border-edge/50 tabular-nums text-[13px];
-  }
+  .audit-table tbody td { @apply py-2.5 border-b border-edge/50 tabular-nums text-[13px]; }
   .audit-table tbody tr:last-child td { border-bottom: 0; }
 
-  /* ——— Ballot rows. Selected = a filled left rule: the mark you'd make on
-         paper, translated. No checkbox chrome. ——— */
+  /* Ballot rows. Selected = a filled left rule: the mark you'd make on paper. */
   .ballot-row {
     @apply flex items-center gap-3 border border-edge rounded-[3px] px-4 py-3
       cursor-pointer transition-all duration-150 select-none;
@@ -222,44 +189,28 @@
 }
 
 /* ——— The hero figure: a Merkle authentication path ——— */
-
 .tree-edge { stroke: #17405f; stroke-width: 1.25; fill: none; }
-
 .tree-edge-lit {
-  stroke: #ffc943;
-  stroke-width: 2;
-  fill: none;
+  stroke: #ffc943; stroke-width: 2; fill: none;
   stroke-dasharray: var(--len, 200);
   animation: tv-draw 0.52s ease-out both;
 }
-
 .tree-node { fill: #17405f; }
-
 .tree-node-lit {
   fill: #ffc943;
-  transform-box: fill-box;
-  transform-origin: center;
+  transform-box: fill-box; transform-origin: center;
   animation: tv-node 0.3s cubic-bezier(0.3, 1.4, 0.5, 1) both;
 }
-
 /* The voter's own leaf never resolves. That is the point of the figure. */
 .tree-leaf-secret {
-  fill: none;
-  stroke: #ffc943;
-  stroke-width: 1.5;
-  stroke-dasharray: 3 3;
+  fill: none; stroke: #ffc943; stroke-width: 1.5; stroke-dasharray: 3 3;
   animation: tv-pulse 2.4s ease-in-out infinite;
 }
-
 .tree-caption {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  fill: #7e9bb2;
-  text-transform: uppercase;
+  font-size: 9px; letter-spacing: 0.1em; fill: #7e9bb2; text-transform: uppercase;
 }
 .tree-caption-lit { fill: #ffc943; }
-
 @keyframes tv-draw  { from { stroke-dashoffset: var(--len, 200); } to { stroke-dashoffset: 0; } }
 @keyframes tv-node  { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
 @keyframes tv-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }

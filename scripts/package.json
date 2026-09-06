@@ -1,5 +1,5 @@
 {
-  "name": "trustvote-scripts",
+  "name": "chorus-scripts",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -7,10 +7,12 @@
     "commitments": "node deriveCommitments.js",
     "tree": "node generateMerkleTree.js",
     "keys": "node generateKeys.js",
-    "tally": "node tally.js"
+    "tally": "node tally.js",
+    "bench": "node benchProve.mjs"
   },
   "dependencies": {
     "circomlibjs": "^0.1.7",
-    "ethers": "^6.13.0"
+    "ethers": "^6.13.0",
+    "snarkjs": "^0.7.4"
   }
 }

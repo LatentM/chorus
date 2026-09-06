@@ -145,7 +145,7 @@ async function main() {
   console.log("Wrote results.json");
 
   // ---- 5. Upload to IPFS (Pinata or mock) ----
-  const cid = await uploadJSON(results, `trustvote-results-${electionId}.json`);
+  const cid = await uploadJSON(results, `chorus-results-${electionId}.json`);
   console.log(`Results CID: ${cid}`);
 
   if (process.env.PRIVATE_KEY) {

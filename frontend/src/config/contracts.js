@@ -14,7 +14,7 @@ const RAW_ADDRESS = (import.meta.env.VITE_PLATFORM_ADDRESS || "").trim();
 function validateAddress(value) {
   if (!value) {
     console.warn(
-      "[TrustVote] VITE_PLATFORM_ADDRESS is not set in frontend/.env — " +
+      "[Chorus] VITE_PLATFORM_ADDRESS is not set in frontend/.env — " +
         "using the zero address. Deploy the contracts, then set it and " +
         "RESTART `npm run dev` (Vite reads .env only at startup)."
     );
@@ -26,7 +26,7 @@ function validateAddress(value) {
         "spreadsheet. Copy it straight from the deploy output instead."
       : "";
     throw new Error(
-      `[TrustVote] VITE_PLATFORM_ADDRESS in frontend/.env is not a valid ` +
+      `[Chorus] VITE_PLATFORM_ADDRESS in frontend/.env is not a valid ` +
         `address: "${value}". Expected 0x followed by 40 hex characters.${hint}`
     );
   }

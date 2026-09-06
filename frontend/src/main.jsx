@@ -9,9 +9,9 @@ import App from "./App.jsx";
 import "./index.css";
 
 const config = getDefaultConfig({
-  appName: "TrustVote",
+  appName: "Chorus",
   projectId:
-    import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "TRUSTVOTE_DEV_PLACEHOLDER",
+    import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "CHORUS_DEV_PLACEHOLDER",
   // Local Hardhat node first (no faucet needed — see README), then Polygon
   // Amoy (testnet) and Polygon mainnet. The app follows the wallet's network.
   chains: [hardhat, polygonAmoy, polygon],

@@ -5,8 +5,7 @@ export default {
     extend: {
       colors: {
         // "Cyanotype" — a blueprint is a plan published so anyone can inspect it.
-        // Token NAMES are unchanged from the previous system on purpose, so every
-        // existing page picks up the new palette without a single edit.
+        // Token NAMES are stable so pages never need edits when values change.
         ink: "#05121F",     // drafting-table ground — deep blue, never pure black
         panel: "#0A2135",   // sheet laid on the table
         edge: "#17405F",    // hairline / grid rule
@@ -17,8 +16,6 @@ export default {
         foil: "#FFC943",    // ATTESTED. On-chain truth, focus rings, the mark.
       },
       fontFamily: {
-        // Archivo carries a width axis; held wide it reads engineered rather
-        // than editorial — the opposite of the serif it replaces.
         display: ['"Archivo"', "ui-sans-serif", "system-ui", "sans-serif"],
         sans: ['"Instrument Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ['"IBM Plex Mono"', "ui-monospace", "monospace"],
@@ -29,7 +26,6 @@ export default {
           from: { opacity: "0", transform: "translateY(6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
-        // The wax stamp is gone; a verdict now snaps in like a plotter pen.
         "stamp-in": {
           "0%": { opacity: "0", transform: "translateY(6px) scaleX(0.94)" },
           "100%": { opacity: "1", transform: "translateY(0) scaleX(1)" },
