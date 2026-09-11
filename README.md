@@ -353,6 +353,5 @@ CI runs all three on every push (`.github/workflows/ci.yml`). ESLint's
 variables used before declaration, each surfacing only at runtime after a
 minute of proof generation.
 
-## License
-
-MIT — see [LICENSE](LICENSE).
+Copyright ©️ Mohammed Mubashir Hasan and Yusuf Khan
+All Rights Reserved
