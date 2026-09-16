@@ -10,6 +10,7 @@
 //                    identity is the nullifier, eligibility is the proof.
 //   GET  /elections  Event indexer: cached ElectionCreated list for
 //                    instant election discovery without client log scans.
+//   GET  /health     Relayer balance, indexer position, config flags.
 //
 // Run: cp .env.example .env && npm install && npm start
 import express from "express";
@@ -24,9 +25,11 @@ const {
   RELAYER_PRIVATE_KEY,
   PINATA_JWT,
   DEPLOY_BLOCK = "0",
-  // Comma-separated list of origins allowed to call this service.
-  // Defaults to the Vite dev server. Set to your deployed frontend in prod.
-  ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173",
+  // Comma-separated origins allowed to call this service.
+  //   3000 = `npm run dev`      (port set in frontend/vite.config.js)
+  //   4173 = `npx vite preview` (production build)
+  // Set to your deployed frontend URL in production.
+  ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:4173,http://127.0.0.1:4173",
   // Behind a reverse proxy (nginx, Render, Fly), set to "1" so req.ip is
   // the client and not the proxy — otherwise everyone shares one rate limit.
   TRUST_PROXY = "0",
@@ -41,7 +44,9 @@ const app = express();
 if (TRUST_PROXY === "1") app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
-const origins = ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
+const origins = ALLOWED_ORIGINS.split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 app.use(cors({ origin: origins, methods: ["GET", "POST"] }));
 app.use(express.json({ limit: "2mb" }));
 
@@ -54,7 +59,9 @@ const readContract = PLATFORM_ADDRESS
   : null;
 
 if (!PLATFORM_ADDRESS)
-  console.warn("[backend] PLATFORM_ADDRESS not set — /relay and /elections disabled");
+  console.warn(
+    "[backend] PLATFORM_ADDRESS not set — /relay and /elections disabled",
+  );
 
 /* ------------------------------ rate limiting --------------------------- */
 // Sliding window per IP, per route. Evicted every window so memory is bounded.
@@ -87,14 +94,18 @@ const mockStore = new Map(); // mock CID -> content (dev fallback)
 app.post("/pin", rateLimit("pin", 20), async (req, res) => {
   try {
     const { content, name = "chorus.json" } = req.body || {};
-    if (content === undefined) return res.status(400).json({ error: "content required" });
+    if (content === undefined)
+      return res.status(400).json({ error: "content required" });
     if (typeof name !== "string" || name.length > 120)
       return res.status(400).json({ error: "invalid name" });
 
     if (!PINATA_JWT) {
       const cid =
         "QmMOCK" +
-        createHash("sha256").update(JSON.stringify(content)).digest("hex").slice(0, 40);
+        createHash("sha256")
+          .update(JSON.stringify(content))
+          .digest("hex")
+          .slice(0, 40);
       mockStore.set(cid, content);
       return res.json({ cid, mock: true });
     }
@@ -104,12 +115,18 @@ app.post("/pin", rateLimit("pin", 20), async (req, res) => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${PINATA_JWT}`,
       },
-      body: JSON.stringify({ pinataMetadata: { name }, pinataContent: content }),
+      body: JSON.stringify({
+        pinataMetadata: { name },
+        pinataContent: content,
+      }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!r.ok) {
+      // Log the body server-side; never return a provider error to the client.
       console.error("pinata:", r.status, await r.text());
-      return res.status(502).json({ error: `Pinata rejected the pin (${r.status})` });
+      return res
+        .status(502)
+        .json({ error: `Pinata rejected the pin (${r.status})` });
     }
     const j = await r.json();
     res.json({ cid: j.IpfsHash });
@@ -125,8 +142,10 @@ const GATEWAYS = [
   "https://ipfs.io/ipfs/",
   "https://cloudflare-ipfs.com/ipfs/",
 ];
-// CIDv0 (Qm + 44 base58) or CIDv1 (b + base32). Mock CIDs are Qm + hex.
-const CID_RE = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|QmMOCK[0-9a-f]{40}|b[a-z2-7]{50,})$/;
+// CIDv0 (Qm + 44 base58) or CIDv1 (b + base32). Mock CIDs are QmMOCK + hex.
+// Validated before any fetch so this is not an open proxy.
+const CID_RE =
+  /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|QmMOCK[0-9a-f]{40}|b[a-z2-7]{50,})$/;
 
 app.get("/ipfs/:cid", rateLimit("ipfs", 60), async (req, res) => {
   const { cid } = req.params;
@@ -145,30 +164,35 @@ app.get("/ipfs/:cid", rateLimit("ipfs", 60), async (req, res) => {
 
 /* --------------------------- gasless relayer ---------------------------- */
 const isUintString = (v) => typeof v === "string" && /^\d{1,78}$/.test(v);
-const isUintArray = (v, n) => Array.isArray(v) && v.length === n && v.every(isUintString);
+const isUintArray = (v, n) =>
+  Array.isArray(v) && v.length === n && v.every(isUintString);
 
 app.post("/relay", rateLimit("relay", 30), async (req, res) => {
   try {
     if (!relayerWallet || !PLATFORM_ADDRESS)
       return res.status(503).json({ error: "Relayer not configured" });
 
-    const { electionId, nullifier, ciphertext, a, b, c, input } = req.body || {};
+    const { electionId, nullifier, ciphertext, a, b, c, input } =
+      req.body || {};
     // Shape validation only — the CONTRACT is the security boundary: it
     // checks the window, nullifier, stored parameters, and the Groth16 proof.
     // Values must arrive as decimal strings; uint256 does not fit in a JS number.
     if (
-      !isUintString(String(electionId ?? "")) ||   // election 0 is valid
+      !isUintString(String(electionId ?? "")) || // election 0 is valid
       !isUintString(String(nullifier ?? "")) ||
       !isUintArray(ciphertext, 4) ||
       !isUintArray(a, 2) ||
-      !Array.isArray(b) || b.length !== 2 || !b.every((row) => isUintArray(row, 2)) ||
+      !Array.isArray(b) ||
+      b.length !== 2 ||
+      !b.every((row) => isUintArray(row, 2)) ||
       !isUintArray(c, 2) ||
       !isUintArray(input, 9)
     )
       return res.status(400).json({ error: "Malformed ballot payload" });
 
     const args = [
-      BigInt(electionId), BigInt(nullifier),
+      BigInt(electionId),
+      BigInt(nullifier),
       ciphertext.map(BigInt),
       a.map(BigInt),
       [b[0].map(BigInt), b[1].map(BigInt)],
@@ -181,8 +205,10 @@ app.post("/relay", rateLimit("relay", 30), async (req, res) => {
     const tx = await contract.castVote(...args);
     res.json({ txHash: tx.hash });
   } catch (e) {
-    // Revert reasons are safe and useful to surface ("Nullifier used", etc.)
-    res.status(400).json({ error: e.reason || e.shortMessage || "Relay failed" });
+    // Revert reasons are safe and useful to surface ("Already voted", etc.)
+    res
+      .status(400)
+      .json({ error: e.reason || e.shortMessage || "Relay failed" });
   }
 });
 
@@ -197,7 +223,9 @@ async function reindex() {
     const head = await provider.getBlockNumber();
     if (head <= lastBlock) return;
     const logs = await readContract.queryFilter(
-      readContract.filters.ElectionCreated(), lastBlock + 1, head
+      readContract.filters.ElectionCreated(),
+      lastBlock + 1,
+      head,
     );
     for (const l of logs) {
       const id = l.args.electionId.toString();
@@ -214,7 +242,10 @@ async function reindex() {
   } catch (e) {
     // A chain reset (local Hardhat restart) makes `head` go backwards.
     // Start over so stale elections from the old chain don't linger.
-    if (/block|invalid/i.test(e.message)) { lastBlock = -1; electionsCache = []; }
+    if (/block|invalid/i.test(e.message)) {
+      lastBlock = -1;
+      electionsCache = [];
+    }
     console.error("indexer:", e.message);
   }
 }
@@ -226,8 +257,13 @@ app.get("/elections", (_req, res) => res.json(electionsCache));
 app.get("/health", async (_req, res) => {
   let relayerBalance = null;
   try {
-    if (relayerWallet) relayerBalance = ethers.formatEther(await provider.getBalance(relayerWallet.address));
-  } catch { /* chain unreachable — reported as null */ }
+    if (relayerWallet)
+      relayerBalance = ethers.formatEther(
+        await provider.getBalance(relayerWallet.address),
+      );
+  } catch {
+    /* chain unreachable — reported as null */
+  }
   res.json({
     ok: true,
     relayer: !!relayerWallet,
@@ -240,8 +276,8 @@ app.get("/health", async (_req, res) => {
 
 const server = app.listen(PORT, () =>
   console.log(
-    `Chorus backend on :${PORT} · relayer=${!!relayerWallet} · pinata=${!!PINATA_JWT} · origins=${origins.join(",")}`
-  )
+    `Chorus backend on :${PORT} · relayer=${!!relayerWallet} · pinata=${!!PINATA_JWT} · origins=${origins.join(",")}`,
+  ),
 );
 for (const sig of ["SIGINT", "SIGTERM"])
   process.on(sig, () => server.close(() => process.exit(0)));
