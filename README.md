@@ -128,7 +128,6 @@ setResultCID           77,297 gas
 deploy                 1,729,377 gas total
 ```
 
-Reproduce these yourself with [FILL-TABLE-2.md](FILL-TABLE-2.md).
 
 ---
 
