@@ -141,8 +141,6 @@ frontend/     React + Vite. Proving runs in a Web Worker.
 backend/      Optional: relayer, IPFS proxy, event indexer
 scripts/      Commitments, tree, keys, tally, benchmark
 ```
-
-- [VIVA-PREP.md](VIVA-PREP.md) — `VotingPlatform.sol` line by line
 - [DEPLOYMENT.md](DEPLOYMENT.md) — testnet and mainnet, with real gas costs
 - The paper — design rationale and threat model in full
 
