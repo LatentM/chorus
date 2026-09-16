@@ -128,7 +128,6 @@ setResultCID           77,297 gas
 deploy                 1,729,377 gas total
 ```
 
-Reproduce these yourself with [FILL-TABLE-2.md](FILL-TABLE-2.md).
 
 ---
 
@@ -141,20 +140,10 @@ frontend/     React + Vite. Proving runs in a Web Worker.
 backend/      Optional: relayer, IPFS proxy, event indexer
 scripts/      Commitments, tree, keys, tally, benchmark
 ```
-
-- [VIVA-PREP.md](VIVA-PREP.md) — `VotingPlatform.sol` line by line
 - [DEPLOYMENT.md](DEPLOYMENT.md) — testnet and mainnet, with real gas costs
 - The paper — design rationale and threat model in full
 
 ---
-
-## AI assistance
-
-Claude was used substantially here: writing and refactoring implementation
-code, drafting documentation, and writing parts of the test suite.
-
-That doesn't transfer responsibility. The design decisions, the measurements,
-and every claim in this repository are ours. Anything wrong is our error.
 
 ## License
 
