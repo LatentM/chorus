@@ -148,14 +148,6 @@ scripts/      Commitments, tree, keys, tally, benchmark
 
 ---
 
-## AI assistance
-
-Claude was used substantially here: writing and refactoring implementation
-code, drafting documentation, and writing parts of the test suite.
-
-That doesn't transfer responsibility. The design decisions, the measurements,
-and every claim in this repository are ours. Anything wrong is our error.
-
 ## License
 
 None. This is published for reading and citation, not reuse — no licence is
