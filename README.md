@@ -1,8 +1,10 @@
-# Chorus
+# BALLOT
+
+**B**lockchain **A**uthenticated **L**edger for **L**egitimate **O**pen **T**ransparent voting
 
 Anyone can check the count. No one can check your ballot.
 
-Chorus runs elections where the result is publicly recomputable and the
+BALLOT runs elections where the result is publicly recomputable and the
 individual ballot stays private. Not by policy — by construction. Your browser
 encrypts the vote and proves you're on the electoral roll without revealing
 which voter you are. A smart contract verifies that proof and refuses a second
@@ -35,7 +37,7 @@ cd frontend && npm run dev                                # 4 — app on :3000
 
 Put the deployed address in `frontend/.env` as `VITE_PLATFORM_ADDRESS` and
 restart the dev server — Vite only reads `.env` at boot. Import one of the
-private keys Hardhat printed into MetaMask or Rabby, on chain 31337.
+private keys Hardhat printed into Rabby or MetaMask, on chain 31337.
 
 Then: **Admin** to create an election, **Voter** to register and vote,
 **Verifier** to recount it yourself.
@@ -115,7 +117,7 @@ log — but it isn't prevented.
 
 ## Measured
 
-Local chain, real verifier, HP Pavilion 14-ce3xxx (i5-1035G1, 8 GB, Chrome 153).
+Local chain, real verifier, HP Pavilion 14-ce3xxx (i5-1035G1, 8 GB, Edge 153 / V8 15.3).
 
 ```
 circuit                22,007 constraints
@@ -125,9 +127,9 @@ castVote               318,519 gas
   same, mock verifier  71,716 gas   ← the pairing check costs ~247k
 createElection         189,030 gas
 setResultCID           77,297 gas
-deploy                 1,729,377 gas total
+deploy                 1,729,377 gas  (verifier + platform)
+full 5-voter election  3,588,299 gas  ≈ 0.18 POL @ 50 gwei
 ```
-
 
 ---
 
@@ -138,12 +140,19 @@ circuits/     VotingCircuit.circom — depth-20 Merkle + nullifier + ElGamal
 contracts/    VotingPlatform.sol, Groth16Verifier.sol, 13 tests
 frontend/     React + Vite. Proving runs in a Web Worker.
 backend/      Optional: relayer, IPFS proxy, event indexer
+              `npm run dev` locally (.env file), `npm start` when hosted
 scripts/      Commitments, tree, keys, tally, benchmark
 ```
-- [DEPLOYMENT.md](DEPLOYMENT.md) — testnet and mainnet, with real gas costs
-- The paper — design rationale and threat model in full
 
 ---
+
+## AI assistance
+
+Claude was used here: writing and refactoring implementation
+code, drafting documentation, and writing parts of the test suite.
+
+That doesn't transfer responsibility. The design decisions, the measurements,
+and every claim in this repository are ours. Anything wrong is our error.
 
 ## License
 

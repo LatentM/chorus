@@ -1,26 +1,57 @@
-node_modules/
+# ─── Secrets. Nothing below this line should ever reach a commit. ───────────
 .env
 .env.local
 **/.env
 **/.env.local
-cache/
-artifacts/
-dist/
-.mock-ipfs/
-*.zkey
-*.ptau
-results.json
-merkleTree.json
-electionKeys.json
+.env.*
+!.env.example
+!**/.env.example
 
 # Election secrets downloaded by the app — NEVER commit these
-chorus-election-*-key.json
-chorus-election-*-content-key.json
-chorus-election-*-trustee-*.json
+ballot-election-*-key.json
+ballot-election-*-content-key.json
+ballot-election-*-trustee-*.json
+# Old names, in case anything predates the rename
+trustvote-election-*.json
+chorus-election-*.json
+electionKeys.json
 commitments.csv
-verification_key.json
 
-# Circuit build outputs (regenerate with circom; ceremony files are *.zkey/*.ptau above)
+# ─── Internal working documents — not for a public repo ────────────────────
+VIVA-PREP.md
+DEPLOYMENT.md
+FILL-TABLE-2.md
+WORD-NOTES.md
+
+# ─── Ceremony and circuit build output (regenerable; also very large) ───────
+*.zkey
+*.ptau
+verification_key.json
 circuits/build/
 circuits/circom/
 circom.exe
+# The browser needs these two at runtime. They are build artifacts, but the
+# app fetches them from /circuits/ — host them or commit the .wasm if small.
+frontend/public/circuits/*.zkey
+
+# ─── Generated election data ───────────────────────────────────────────────
+merkleTree.json
+results.json
+.mock-ipfs/
+
+# ─── Dependencies and build output ─────────────────────────────────────────
+node_modules/
+dist/
+cache/
+artifacts/
+coverage/
+typechain-types/
+
+# ─── Editor / OS noise ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+npm-debug.log*
